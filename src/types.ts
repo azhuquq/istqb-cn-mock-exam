@@ -7,10 +7,10 @@ export interface Question {
   sourceImages: string[]; answerImages: string[]; stemImages: string[];
 }
 export interface Source {paper: string; questionFile: string; answerFile: string; questionSha256: string; answerSha256: string}
-export interface Bank {version: number; syllabus: string; sources: Source[]; questions: Question[]}
+export interface Bank {version: number; bankVersion: string; syllabus: string; sources: Source[]; questions: Question[]}
 export type FormalPaper = 'A' | 'B' | 'C' | 'D'
 interface AttemptBase {
-  id: string; questionIds: string[];
+  id: string; questionIds: string[]; bankVersion?: string;
   answers: Record<string, string[]>; flags: string[];
   startedAt: number; deadline: number; endedAt: number | null;
   status: 'active' | 'completed'; index: number;

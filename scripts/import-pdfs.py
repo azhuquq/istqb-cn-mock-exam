@@ -99,7 +99,7 @@ def render_ranges(pdf, pages, start, end, prefix, folder, xbounds=None):
         name = f'{prefix}-{page + 1}.webp'
         geometry = f'{round((right-left)*SCALE)}x{round((bottom-top)*SCALE)}+{round(left*SCALE)}+{round(top*SCALE)}'
         run('magick', str(raster), '-crop', geometry, '+repage', '-quality', '90', str(OUT / name))
-        assets.append('/questions/' + name)
+        assets.append('/' + (OUT / name).relative_to(ROOT / 'public').as_posix())
     return assets
 
 
@@ -227,10 +227,17 @@ def import_paper(paper, source, folder):
 
 
 def main():
+    global OUT
     parser = argparse.ArgumentParser()
     parser.add_argument('--source-dir', required=True, type=Path)
+    parser.add_argument('--bank-version', required=True, help='New unpublished major.minor.patch version')
     args = parser.parse_args()
-    OUT.mkdir(parents=True, exist_ok=True)
+    if not re.fullmatch(r'(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)', args.bank_version):
+        parser.error('bank version must be major.minor.patch')
+    if (ROOT / 'public/data/banks' / (args.bank_version + '.json')).exists():
+        parser.error('this bank version is already frozen; choose a new version')
+    OUT = ROOT / 'public/questions' / args.bank_version
+    OUT.mkdir(parents=True, exist_ok=False)
     questions, sources = [], []
     with tempfile.TemporaryDirectory(prefix='istqb-pdf-') as directory:
         for paper in 'ABCD':
@@ -238,7 +245,8 @@ def main():
             questions.extend(q)
             sources.append(source)
             print(f'{paper}: {len(q)} questions imported', flush=True)
-    payload = {'version': 1, 'syllabus': 'CTFL 4.0.1', 'sources': sources, 'questions': questions}
+    # Import into the working copy only; frozen releases are published separately.
+    payload = {'version': 1, 'bankVersion': args.bank_version, 'syllabus': 'CTFL 4.0.1', 'sources': sources, 'questions': questions}
     pdf_out = ROOT / 'public/sources'
     pdf_out.mkdir(parents=True, exist_ok=True)
     for source in sources:
@@ -246,6 +254,8 @@ def main():
             original = args.source_dir / source[key]
             destination = pdf_out / source[key]
             if original.resolve() != destination.resolve():
+                if destination.exists() and original.read_bytes() != destination.read_bytes():
+                    raise ValueError(f'Refusing to overwrite an existing source PDF: {destination.name}')
                 shutil.copyfile(original, destination)
     (ROOT / 'public/data/questions.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2)+'\n')
     print(f'Imported {len(questions)} questions')

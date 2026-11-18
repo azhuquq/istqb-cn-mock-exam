@@ -1,5 +1,6 @@
 import type {Attempt, FormalPaper, Question, StudyState} from './types'
-import {isStoredMixedSeed, type MixedPaper} from './mixed'
+import {isStoredMixedSeed, parseMixedSeed, type MixedPaper} from './mixed'
+import {CURRENT_BANK_VERSION, isBankVersion} from './versions'
 
 export const STORAGE_KEY = 'istqb-study-v1'
 export const CHAPTERS = ['测试基础', '整个软件开发生命周期中的测试', '静态测试', '测试分析与设计', '管理测试活动', '测试工具']
@@ -11,13 +12,13 @@ export function isCorrect(selected: string[] = [], expected: string[]) {
 export function toggleOption(selected: string[], option: string, count: number) {
   return count === 1 ? (selected.includes(option) ? [] : [option]) : selected.includes(option) ? selected.filter(id => id !== option) : [...selected, option]
 }
-export function startAttempt(paper: string, questions: Question[], now = Date.now()): Attempt {
+export function startAttempt(paper: string, questions: Question[], now = Date.now(), bankVersion = CURRENT_BANK_VERSION): Attempt {
   if (!/^[A-D]$/.test(paper)) throw new Error('没有找到这套试卷。')
-  return {id: crypto.randomUUID(), paper: paper as FormalPaper, questionIds: questions.filter(q => q.paper === paper && !q.supplementary).map(q => q.id), answers: {}, flags: [], startedAt: now, deadline: now + EXAM_DURATION, endedAt: null, status: 'active', index: 0}
+  return {id: crypto.randomUUID(), bankVersion, paper: paper as FormalPaper, questionIds: questions.filter(q => q.paper === paper && !q.supplementary).map(q => q.id), answers: {}, flags: [], startedAt: now, deadline: now + EXAM_DURATION, endedAt: null, status: 'active', index: 0}
 }
 export const examName = (paper: string) => paper === 'mixed' ? '混合模拟' : `模拟卷 ${paper}`
 export function startMixedAttempt(paper: MixedPaper, now = Date.now()): Attempt {
-  return {id: crypto.randomUUID(), paper: 'mixed', seed: paper.seed, questionIds: [...paper.questionIds],
+  return {id: crypto.randomUUID(), ...(paper.bankVersion?{bankVersion:paper.bankVersion}:{}), paper: 'mixed', seed: paper.seed, questionIds: [...paper.questionIds],
     answers: {}, flags: [], startedAt: now, deadline: now + EXAM_DURATION, endedAt: null, status: 'active', index: 0}
 }
 export function remaining(attempt: Attempt, now = Date.now()) {return Math.max(0, attempt.deadline - now)}
@@ -55,11 +56,16 @@ const strings = (value: unknown): value is string[] => Array.isArray(value) && v
 const questionId = (value: string) => /^(?:[A-D]-(?:[1-9]|[1-3]\d|40)|A-A(?:[1-9]|1\d|2[0-6]))$/.test(value)
 const answers = (value: unknown): value is Record<string,string[]> => record(value) && Object.entries(value).every(([id,v]) => questionId(id) && strings(v) && v.every(x => /^[A-E]$/.test(x)))
 function validAttempt(value: unknown): value is Attempt {
+  if (record(value) && value.bankVersion !== undefined && !isBankVersion(value.bankVersion)) return false
   if (!record(value) || typeof value.id !== 'string' || !(value.paper === 'mixed' || /^[A-D]$/.test(String(value.paper))) || !strings(value.questionIds) || value.questionIds.length !== 40 || !answers(value.answers) || !strings(value.flags)) return false
   const ids=value.questionIds
   const validQuestions = value.paper === 'mixed'
     ? isStoredMixedSeed(value.seed) && new Set(ids).size === 40 && ids.every(questionId)
     : value.seed === undefined && ids.every((id,i)=>id===`${value.paper}-${i+1}`)
+  if(value.paper==='mixed'&&isStoredMixedSeed(value.seed)&&value.bankVersion!==undefined) {
+    const seedVersion=parseMixedSeed(value.seed).bankVersion
+    if(seedVersion&&seedVersion!==value.bankVersion)return false
+  }
   return validQuestions && Object.keys(value.answers).every(id=>ids.includes(id)) && value.flags.every(id=>ids.includes(id))
     && Number.isFinite(value.startedAt) && Number.isFinite(value.deadline) && Number(value.deadline) > Number(value.startedAt)
     && Number.isInteger(value.index) && Number(value.index) >= 0 && Number(value.index) < 40

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "currentBank": "1.0.0",
+  "currentAlgorithm": "M1",
+  "banks": {
+    "1.0.0": {
+      "seedId": 1,
+      "path": "/data/banks/1.0.0.json",
+      "fingerprint": "97B0A3C832E5",
+      "sha256": "89a44d766c53ca973fb4a220a6038cbf21428bed145f128aa26083f33f956024",
+      "assetsSha256": "caed920ecc833d9b76152b306c657b71ba766c6599f7329612f6d2a7c3ec3e9f"
+    }
+  },
+  "algorithms": {
+    "M1": {
+      "path": "src/algorithms/m1.ts",
+      "sha256": "98b82d2ae9e6f0a361cbbc1179dcf80a068088e064224a1ba4ed296bf00f36c3"
+    }
+  }
+}

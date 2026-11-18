@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "bankVersion": "1.0.0",
   "syllabus": "CTFL 4.0.1",
   "sources": [
     {

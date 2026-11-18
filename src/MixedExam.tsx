@@ -2,7 +2,8 @@ import {useEffect, useRef, useState} from 'react'
 import {Link, useNavigate, useSearchParams} from 'react-router-dom'
 import {ArrowRight, Copy, ExternalLink, Play, Shuffle} from 'lucide-react'
 import {CHAPTERS, examName, startMixedAttempt} from './core'
-import {bankFingerprint, generateMixedPaper, MIXED_QUOTAS, randomMixedSeed, STRUCTURE_URL, type MixedPaper} from './mixed'
+import {bankFingerprint, MIXED_QUOTAS, randomMixedSeed, STRUCTURE_URL, type MixedPaper} from './mixed'
+import {generateFromSeed} from './banks'
 import {useStudy} from './store'
 
 export function SeedControl({seed}: {seed: string}) {
@@ -38,6 +39,8 @@ export function MixedPage() {
   const [input,setInput] = useState(params.get('seed') || '')
   const [paper,setPaper] = useState<MixedPaper|null>(null)
   const [error,setError] = useState('')
+  const [generating,setGenerating] = useState(false)
+  const generation = useRef(0)
   const requested = params.get('seed') || ''
   useEffect(() => {
     let cancelled = false
@@ -47,18 +50,23 @@ export function MixedPage() {
     return () => {cancelled = true}
   },[bank])
   useEffect(() => {
-    if (!fingerprint || !requested) return
-    try {const next=generateMixedPaper(bank.questions,fingerprint,requested);setPaper(next);setInput(next.seed);setError('')}
-    catch(e) {setError(e instanceof Error ? e.message : '无法生成试卷，请重试。')}
-  },[bank,fingerprint,requested])
-  function generate(seed: string) {
+    if (!requested) return
+    void generate(requested,false)
+    return () => {generation.current++}
+  },[requested])
+  async function generate(seed: string, updateUrl = true) {
+    const request = ++generation.current
+    setGenerating(true)
     try {
-      const next=generateMixedPaper(bank.questions,fingerprint,seed)
-      setPaper(next);setInput(next.seed);setError('');setParams({seed:next.seed},{replace:true})
-    } catch(e) {setError(e instanceof Error ? e.message : '无法生成试卷，请重试。')}
+      const next=await generateFromSeed(seed)
+      if(request!==generation.current)return
+      setPaper(next);setInput(next.seed);setError('')
+      if(updateUrl)setParams({seed:next.seed},{replace:true})
+    } catch(e) {if(request===generation.current)setError(e instanceof Error ? e.message : '无法生成试卷，请重试。')}
+    finally {if(request===generation.current)setGenerating(false)}
   }
   function start() {
-    if (!paper || state.activeExam) return
+    if (!paper || generating || state.activeExam) return
     const attempt = startMixedAttempt(paper)
     setState(s=>s.activeExam?s:{...s,activeExam:attempt})
     navigate('/exam/mixed')
@@ -69,19 +77,19 @@ export function MixedPage() {
       <section className="panel mixed-setup">
         <h2>给自己一套新的挑战</h2>
         <p>40 题 · 60 分钟 · 26 分及格。每章的知识级别与学习目标组均按官方配额抽取。</p>
-        <button className="button primary" disabled={!fingerprint} onClick={()=>generate(randomMixedSeed(fingerprint))}><Shuffle size={16}/>{paper?'重新随机生成':'随机生成试卷'}</button>
+        <button className="button primary" disabled={!fingerprint||generating} onClick={()=>generate(randomMixedSeed(fingerprint,bank.bankVersion))}><Shuffle size={16}/>{generating?'正在准备试卷…':paper?'重新随机生成':'随机生成试卷'}</button>
         <form onSubmit={e=>{e.preventDefault();generate(input)}}>
           <label htmlFor="mixed-seed">使用生成种子复用试卷</label>
-          <input id="mixed-seed" value={input} onChange={e=>setInput(e.target.value)} maxLength={100} placeholder="ISTQB-M1-…" autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false}/>
-          <button className="button secondary" disabled={!fingerprint||!input.trim()}>复用这套试卷 <ArrowRight size={15}/></button>
+          <input id="mixed-seed" value={input} onChange={e=>setInput(e.target.value)} maxLength={100} placeholder="M1-1-…（也支持旧格式）" autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false}/>
+          <button className="button secondary" disabled={generating||!input.trim()}>复用这套试卷 <ArrowRight size={15}/></button>
         </form>
-        <p>相同种子复现相同题目和顺序，每次开考单独计时。种子需要相同版本的题库与抽题算法。</p>
+        <p>相同种子复现相同题目和顺序，每次开考单独计时。复用时会自动加载种子对应的已发布题库和算法版本。</p>
         {error&&<p className="mixed-error" role="alert">{error}</p>}
         {paper&&<div className="mixed-ready">
           <h3>试卷已生成，准备好再开始</h3>
           <p>已抽取 40 道不同题目，满足官方全部配额。点击开始考试后计时。</p>
           <SeedControl seed={paper.seed}/>
-          {!state.activeExam&&<button className="button primary" onClick={start}><Play size={15}/>开始混合模拟</button>}
+          {!state.activeExam&&<button className="button primary" disabled={generating} onClick={start}><Play size={15}/>开始混合模拟</button>}
         </div>}
         {state.activeExam&&<div className="existing-exam-note"><p>你有一场{examName(state.activeExam.paper)}正在进行，请先完成或放弃当前考试。</p><Link className="button primary" to={`/exam/${state.activeExam.paper}`}>继续考试 <ArrowRight size={15}/></Link></div>}
       </section>

@@ -5,6 +5,8 @@ import {abandonState, CHAPTERS, EXAM_DURATION, filterQuestions, finishState, for
 import {StudyProvider, useStudy} from './store'
 import {QuestionShortcuts} from './QuestionShortcuts'
 import {MixedPage, SeedControl} from './MixedExam'
+import {loadCurrentBank} from './banks'
+import {CURRENT_ALGORITHM_VERSION} from './versions'
 import {exportStudy, importStudy, MAX_BACKUP_CODE_LENGTH} from './transfer'
 import type {Attempt, Bank, Question, StudyState} from './types'
 
@@ -52,7 +54,7 @@ function StudyIllustration() {return <svg viewBox="0 0 300 218" fill="none" aria
 </svg>}
 
 function Dashboard() {
-  const {bank,state} = useStudy()
+  const {bank,state,getAttemptBank} = useStudy()
   const done = Object.keys(state.practice.submitted).filter(id=>state.practice.submitted[id])
   const correct = done.filter(id=>{const q=bank.questions.find(q=>q.id===id);return q && isCorrect(state.practice.answers[id],q.correctAnswers)})
   const percent = Math.round(done.length/bank.questions.length*100)
@@ -60,7 +62,7 @@ function Dashboard() {
   return <>
     <div className="page-heading"><div><div className="eyebrow">YOUR LEARNING, ONE STEP AT A TIME</div><h1>学习概览<span className="heading-dot">.</span></h1><p>准备好了吗？从一道题开始，离目标更近一步。</p></div><Badge tone="green"><span className="status-dot"/> CTFL 4.0.1</Badge></div>
     <section className="welcome-panel"><div className="welcome-copy"><div className="welcome-label"><Sparkles size={14}/> 给认真准备的你</div><h2>每一次练习，<br/>都多一分把握。</h2><p>四套完整模拟卷，配合逐题解析。<br className="desktop-break"/>理解知识、查漏补缺，按自己的节奏稳步前进。</p><Link className="button primary" to={hasProgress?`/practice?filter=${encodeURIComponent(state.practice.filter)}&resume=1`:'/practice'}><Play size={15} fill="currentColor"/>{hasProgress?'继续上次练习':'开始我的第一次练习'}<ArrowRight size={16}/></Link></div><div className="welcome-art"><StudyIllustration/><span className="art-caption"><ShieldCheck size={14}/> 官方资料 · 原题解析</span></div><div className="welcome-progress"><div className="mini-label">我的学习进度</div><div className="progress-ring" style={{'--progress':`${percent*3.6}deg`} as React.CSSProperties}><div><strong>{percent}<small>%</small></strong><span>题库已练习</span></div></div><p>已练习 <strong>{done.length}</strong> / {bank.questions.length} 题</p><div className="progress-footnote">日积月累，自有收获</div></div></section>
-    <div className="stats-grid"><Stat icon={<BookOpen/>} label="题库总量" value="186" unit="道" note="160 道模拟题 + 26 道附加题"/><Stat icon={<Target/>} label="练习正确率" value={done.length?`${Math.round(correct.length/done.length*100)}`:'—'} unit={done.length?'%':''} note={done.length?`${correct.length} 道答对，继续保持`:'开始练习后在这里查看'}/><Stat icon={<BookCheck/>} label="待复习错题" value={String(state.mistakes.length)} unit="道" note={state.mistakes.length?'把薄弱点练成得分点':'每一次订正，都是一次进步'}/><Stat icon={<FileCheck2/>} label="完成模拟考试" value={String(state.history.length)} unit="次" note={state.history.length?`已通过 ${state.history.filter(a=>getResult(a,bank.questions).passed).length} 次`:'用一场考试检验学习成果'}/></div>
+    <div className="stats-grid"><Stat icon={<BookOpen/>} label="题库总量" value="186" unit="道" note="160 道模拟题 + 26 道附加题"/><Stat icon={<Target/>} label="练习正确率" value={done.length?`${Math.round(correct.length/done.length*100)}`:'—'} unit={done.length?'%':''} note={done.length?`${correct.length} 道答对，继续保持`:'开始练习后在这里查看'}/><Stat icon={<BookCheck/>} label="待复习错题" value={String(state.mistakes.length)} unit="道" note={state.mistakes.length?'把薄弱点练成得分点':'每一次订正，都是一次进步'}/><Stat icon={<FileCheck2/>} label="完成模拟考试" value={String(state.history.length)} unit="次" note={state.history.length?`已通过 ${state.history.filter(a=>getResult(a,getAttemptBank(a).questions).passed).length} 次`:'用一场考试检验学习成果'}/></div>
     <div className="section-heading"><div><h2>来一场完整演练 <Badge>4 套试卷</Badge></h2><p>保持原卷顺序，还原考试节奏。</p></div><Link className="text-link" to="/exams">查看全部 <ArrowRight size={15}/></Link></div>
     <div className="paper-grid">{'ABCD'.split('').map(p=><PaperCard key={p} paper={p}/>)}</div>
     <div className="section-heading"><div><h2>按章节，逐个攻克</h2><p>跟随大纲的六个章节，给知识建立清晰的坐标。</p></div><Link className="text-link" to="/practice">进入题库 <ArrowRight size={15}/></Link></div>
@@ -135,13 +137,14 @@ function Explanation({q,selected}:{q:Question;selected:string[]}) {
 
 function Exams() {return <><div className="page-heading"><div><div className="eyebrow">PUT YOUR KNOWLEDGE TO THE TEST</div><h1>模拟考试<span className="heading-dot">.</span></h1><p>给自己 60 分钟，检验一次完整的学习成果。</p></div><Badge tone="green"><ShieldCheck size={13}/>原卷顺序</Badge></div><div className="exam-rules-strip"><span><BookOpen/>每卷 40 题</span><span><Clock3/>限时 60 分钟</span><span><Target/>26 分及格</span><span><FileCheck2/>交卷后查看解析</span></div><div className="paper-grid">{'ABCD'.split('').map(p=><PaperCard key={p} paper={p}/>)}</div><div className="panel instructions"><h2>给这次模拟，一个认真的开始。</h2><p>选择一份试卷，按自己的判断完成作答。多选题需要选对全部指定选项才得分，漏选、错选及未答题均不得分。</p><p>作答自动保存，离开页面后仍会继续计时。时间到时自动交卷；如果关闭了页面，重新打开时会完成结算。也可以在考试中选择“放弃考试”，舍弃本场记录。</p><Link className="text-link" to="/practice?filter=extra">想先热身？试试 26 道附加练习 <ArrowRight size={15}/></Link></div></>}
 
-function ConfirmDialog({title,children,onCancel,onConfirm,confirmText='确认'}:{title:string;children:ReactNode;onCancel:()=>void;onConfirm:()=>void;confirmText?:string}) {
+function ConfirmDialog({title,children,onCancel,onConfirm,confirmText='确认',busy=false}:{title:string;children:ReactNode;onCancel:()=>void;onConfirm:()=>void;confirmText?:string;busy?:boolean}) {
   useEffect(()=>{const h=(e:KeyboardEvent)=>{if(e.key==='Escape')onCancel()};window.addEventListener('keydown',h);return()=>window.removeEventListener('keydown',h)},[onCancel])
-  return <div className="dialog-backdrop" onClick={onCancel}><div className="confirm-dialog panel" onKeyDown={trapDialogFocus} role="dialog" aria-modal="true" aria-labelledby="dialog-title" onClick={e=>e.stopPropagation()}><h2 id="dialog-title">{title}</h2><div>{children}</div><div className="dialog-actions"><button className="button secondary" autoFocus onClick={onCancel}>返回</button><button className="button primary" onClick={onConfirm}>{confirmText}</button></div></div></div>
+  return <div className="dialog-backdrop" onClick={onCancel}><div className="confirm-dialog panel" onKeyDown={trapDialogFocus} role="dialog" aria-modal="true" aria-labelledby="dialog-title" onClick={e=>e.stopPropagation()}><h2 id="dialog-title">{title}</h2><div>{children}</div><div className="dialog-actions"><button className="button secondary" autoFocus disabled={busy} onClick={onCancel}>返回</button><button className="button primary" disabled={busy} onClick={onConfirm}>{confirmText}</button></div></div></div>
 }
 function Exam() {
   const {paper=''}=useParams()
-  const {bank,state,setState}=useStudy()
+  const {bank:currentBank,state,setState,getAttemptBank}=useStudy()
+  const bank=state.activeExam?getAttemptBank(state.activeExam):currentBank
   const navigate=useNavigate()
   const [confirm,setConfirm]=useState(false)
   const [abandon,setAbandon]=useState(false)
@@ -152,7 +155,7 @@ function Exam() {
   if(paper!=='mixed'&&!/^[A-D]$/.test(paper))return <Empty title="没有找到这套试卷"><Link to="/exams" className="button primary">选择试卷</Link></Empty>
   const active=state.activeExam
   if(paper==='mixed'&&active?.paper!=='mixed'){const done=state.history.find(a=>a.id===currentId);return <Navigate to={done?`/results/${done.id}`:'/mixed'} replace/>}
-  function start() {const attempt=startAttempt(paper,bank.questions);setCurrentId(attempt.id);setState(s=>s.activeExam?s:{...s,activeExam:attempt})}
+  function start() {const attempt=startAttempt(paper,bank.questions,Date.now(),bank.bankVersion);setCurrentId(attempt.id);setState(s=>s.activeExam?s:{...s,activeExam:attempt})}
   if(!active||active.paper!==paper)return <><Link className="back-link" to="/exams"><ArrowLeft size={16}/>返回模拟考试</Link><div className="exam-start panel"><span className={`paper-letter large ${paperColors[paper]}`}>{paper}</span><div className="eyebrow">CERTIFIED TESTER FOUNDATION LEVEL</div><h1>基础级模拟卷 {paper}</h1><p>一次完整演练，让准备更有方向。</p><div className="exam-start-facts"><div><strong>40<span>题</span></strong><small>每题 1 分</small></div><div><strong>60<span>分钟</span></strong><small>限时完成</small></div><div><strong>26<span>分</span></strong><small>及格线 · 65%</small></div></div><div className="start-notes"><p><CheckCircle2 size={16}/>交卷前不显示答案，完成后提供逐题解析。</p><p><CheckCircle2 size={16}/>支持答题卡跳转和标记，进度自动保存在本机。</p><p><Clock3 size={16}/>开始后计时不暂停，关闭页面后仍会继续计时。</p></div>{active?<div className="existing-exam-note"><p>你还有一场 {examName(active.paper)}考试正在进行。请先完成或放弃当前考试。</p><Link className="button primary" to={`/exam/${active.paper}`}>继续{examName(active.paper)} <ArrowRight size={16}/></Link></div>:<button className="button primary wide" onClick={start}><Play size={16}/>准备好了，开始考试</button>}</div></>
   const attempt=active
   const index=attempt.index
@@ -169,11 +172,12 @@ function Exam() {
 
 function Results() {
   const {id}=useParams()
-  const {bank,state}=useStudy()
+  const {state,getAttemptBank}=useStudy()
   const attempt=state.history.find(a=>a.id===id)
   const [filter,setFilter]=useState('all')
   const [index,setIndex]=useState(0)
   if(!attempt)return <Empty title="这份考试记录不在当前浏览器中"><p>考试记录仅保存在完成考试的浏览器里。</p><Link to="/history" className="button primary">查看本机记录</Link></Empty>
+  const bank=getAttemptBank(attempt)
   const result=getResult(attempt,bank.questions)
   const items=attempt.questionIds.map(id=>bank.questions.find(q=>q.id===id)!).filter(q=>filter==='all'||!isCorrect(attempt.answers[q.id],q.correctAnswers))
   const q=items[Math.min(index,items.length-1)]
@@ -188,8 +192,8 @@ function Mistakes() {
   return <><div className="page-heading"><div><div className="eyebrow">TURN MISTAKES INTO MOMENTUM</div><h1>我的错题<span className="heading-dot">.</span></h1><p>错题不代表退步，重新理解它，就是一次进步。</p></div>{state.mistakes.length>0&&<Link className="button primary" to="/practice?filter=mistakes"><RotateCcw size={15}/>开始错题复习</Link>}</div><div className="list-toolbar"><span>共 <strong>{state.mistakes.length}</strong> 道待复习题目</span><select aria-label="筛选错题章节" value={chapter} onChange={e=>setChapter(e.target.value)}><option value="all">全部章节</option>{CHAPTERS.map((c,i)=><option key={c} value={i+1}>第 {i+1} 章 · {c}</option>)}</select></div>{questions.length?<div className="mistake-list">{questions.map(q=><article className="mistake-row panel" key={q.id}><span className={`paper-letter small ${paperColors[q.paper]}`}>{q.paper}</span><div className="mistake-copy"><div><Badge>{q.selectionCount>1?'多选题':'单选题'}</Badge><span>第 {q.number} 题 · 第 {q.chapter} 章 · {q.learningObjective}</span></div><h3>{q.stem.slice(0,150)}</h3></div><Link className="text-link" to={`/practice?filter=mistakes&question=${q.id}`}>复习 <ArrowRight size={15}/></Link><button className="icon-button remove-mistake" aria-label={`移除 ${q.paper} 卷第 ${q.number} 题`} onClick={()=>setState(s=>({...s,mistakes:s.mistakes.filter(id=>id!==q.id)}))}><Trash2 size={16}/></button></article>)}</div>:<Empty title={state.mistakes.length?'这个章节暂时没有错题':'你的错题本还是空的'} icon={<BookCheck/>}><p>{state.mistakes.length?'试试其他章节，或继续进行专项练习。':'练习或考试中的错题会自动出现在这里。'}</p><Link className="button primary" to="/practice">去练习 <ArrowRight size={15}/></Link></Empty>}</>
 }
 function HistoryPage() {
-  const {bank,state}=useStudy()
-  return <><div className="page-heading"><div><div className="eyebrow">LOOK BACK, MOVE FORWARD</div><h1>考试记录<span className="heading-dot">.</span></h1><p>记录每一次尝试，也看见每一点进步。</p></div><Link to="/exams" className="button primary">开始新考试 <ArrowRight size={15}/></Link></div>{state.history.length?<div className="panel history-table"><div className="history-table-head"><span>模拟试卷</span><span>开始时间</span><span>考试用时</span><span>成绩</span><span>结果</span><span/></div>{state.history.map(a=>{const r=getResult(a,bank.questions);return <div className="history-row" key={a.id}><span className="history-paper"><span className={`paper-letter small ${paperColors[a.paper]}`}>{a.paper==='mixed'?'混':a.paper}</span><strong>{examName(a.paper)}</strong></span><span>{dateText(a.startedAt)}</span><span>{formatTime((a.endedAt||a.deadline)-a.startedAt)}</span><span><strong>{r.score}</strong><small> / 40</small></span><span><Badge tone={r.passed?'green':'orange'}>{r.passed?'已通过':'未通过'}</Badge></span><Link className="text-link" to={`/results/${a.id}`}>查看报告 <ChevronRight size={14}/></Link></div>})}</div>:<Empty title="你的第一份成绩单，等你开启" icon={<History/>}><p>完成一次模拟考试后，就能在这里回顾成绩与解析。</p><Link className="button primary" to="/exams">选择一份试卷 <ArrowRight size={15}/></Link></Empty>}</>
+  const {state,getAttemptBank}=useStudy()
+  return <><div className="page-heading"><div><div className="eyebrow">LOOK BACK, MOVE FORWARD</div><h1>考试记录<span className="heading-dot">.</span></h1><p>记录每一次尝试，也看见每一点进步。</p></div><Link to="/exams" className="button primary">开始新考试 <ArrowRight size={15}/></Link></div>{state.history.length?<div className="panel history-table"><div className="history-table-head"><span>模拟试卷</span><span>开始时间</span><span>考试用时</span><span>成绩</span><span>结果</span><span/></div>{state.history.map(a=>{const r=getResult(a,getAttemptBank(a).questions);return <div className="history-row" key={a.id}><span className="history-paper"><span className={`paper-letter small ${paperColors[a.paper]}`}>{a.paper==='mixed'?'混':a.paper}</span><strong>{examName(a.paper)}</strong></span><span>{dateText(a.startedAt)}</span><span>{formatTime((a.endedAt||a.deadline)-a.startedAt)}</span><span><strong>{r.score}</strong><small> / 40</small></span><span><Badge tone={r.passed?'green':'orange'}>{r.passed?'已通过':'未通过'}</Badge></span><Link className="text-link" to={`/results/${a.id}`}>查看报告 <ChevronRight size={14}/></Link></div>})}</div>:<Empty title="你的第一份成绩单，等你开启" icon={<History/>}><p>完成一次模拟考试后，就能在这里回顾成绩与解析。</p><Link className="button primary" to="/exams">选择一份试卷 <ArrowRight size={15}/></Link></Empty>}</>
 }
 
 function DataTransfer() {
@@ -200,6 +204,7 @@ function DataTransfer() {
   const [notice,setNotice]=useState('')
   const [error,setError]=useState('')
   const [copying,setCopying]=useState(false)
+  const [importing,setImporting]=useState(false)
   const fail=(e:unknown)=>setError(e instanceof Error?e.message:'操作失败，请重试。')
   function generate() {
     setError('');setNotice('');setExportCode('')
@@ -252,10 +257,12 @@ function DataTransfer() {
     setError('');setNotice('');setPreview(null)
     try {setPreview(importStudy(importCode))} catch(e) {fail(e)}
   }
-  function restore() {
-    if(!preview)return
-    try {replaceState(preview);setPreview(null);setImportCode('');setExportCode('');setNotice('学习记录已导入并保存。已过期的考试按原截止时间自动结算。');setError('')}
+  async function restore() {
+    if(!preview||importing)return
+    setImporting(true)
+    try {await replaceState(preview);setPreview(null);setImportCode('');setExportCode('');setNotice('学习记录已导入并保存。已过期的考试按原截止时间自动结算。');setError('')}
     catch(e) {setPreview(null);fail(e)}
+    finally {setImporting(false)}
   }
   return <div className="data-transfer">
     <h3>备份与迁移</h3>
@@ -268,7 +275,7 @@ function DataTransfer() {
     <p className="transfer-hint">导入会替换当前浏览器的全部学习记录，建议先导出备份。进行中的考试沿用原截止时间，过期则自动交卷。</p>
     {notice&&<p className="transfer-notice" role="status">{notice}</p>}
     {error&&<p className="transfer-error" role="alert">{error} 当前学习记录未被替换。</p>}
-    {preview&&<ConfirmDialog title="用备份替换本机学习记录？" confirmText="确认替换并导入" onCancel={()=>setPreview(null)} onConfirm={restore}>
+    {preview&&<ConfirmDialog title="用备份替换本机学习记录？" confirmText={importing?'正在导入…':'确认替换并导入'} busy={importing} onCancel={()=>{if(!importing)setPreview(null)}} onConfirm={restore}>
       <p>备份包含 {Object.values(preview.practice.submitted).filter(Boolean).length} 道已提交练习、{preview.mistakes.length} 道错题、{preview.history.length} 次已完成考试。</p>
       <p>{preview.activeExam?`还有一场${examName(preview.activeExam.paper)}，截止于 ${new Date(preview.activeExam.deadline).toLocaleString('zh-CN')}。${preview.activeExam.deadline<=Date.now()?'该考试已过期，导入后会自动结算。':''}`:'没有进行中的考试。'}</p>
       <p>将覆盖当前练习进度、错题和考试记录。确认前可以返回并先导出当前记录。</p>
@@ -280,13 +287,13 @@ function About() {
   const {bank,storageError}=useStudy()
   const [reset,setReset]=useState(false)
   function backup() {const blob=new Blob([localStorage.getItem(STORAGE_KEY)||'{}'],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`istqb-study-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url)}
-  return <><div className="page-heading"><div><div className="eyebrow">A LITTLE CONTEXT</div><h1>关于这间练习室<span className="heading-dot">.</span></h1><p>让资料更好用，让练习更专注。</p></div></div><div className="about-grid"><section className="panel about-panel"><h2>题库来源</h2><p>题目来自你提供的 CTFL 基础级 4.0.1 中文模拟卷。四套试卷各 40 题，A 卷另有 26 道附加题，共 186 道。A–D 是不同试卷，不代表难度等级。</p><p>题目与解析版权归 ISTQB®／CSTQB® 及相应作者所有，中文翻译、编辑及出版由 CSTQB 负责。本站为非官方、非商业学习工具，不提供认证或正式考试服务。</p><p>题目及解析保留原文。图表使用源文件裁图，可通过“查看原题”“对照原版解析”核对排版与出处。</p><p>按试卷下载完整试题与答案解析，共 8 份原始 PDF。</p><div className="source-file-list">{bank.sources.map(s=><div key={s.paper}><Badge tone="green">{s.paper} 卷</Badge><div className="source-downloads">{[{label:"试题 PDF",file:s.questionFile},{label:"答案解析 PDF",file:s.answerFile}].map(file=><a key={file.file} className="source-download" href={`/sources/${encodeURIComponent(file.file)}`} download={file.file} aria-label={`下载 ${s.paper} 卷${file.label}`} title={file.file}><ArrowDownToLine size={16}/><span><strong>{file.label}</strong><small>{file.file}</small></span></a>)}</div></div>)}</div></section><section className="panel about-panel"><h2>考试与记录</h2><p>模拟考试默认 40 题、60 分钟、满分 40 分，26 分及格。A–D 原卷考试不包含附加题；混合模拟从全部 186 题中按官方章节、知识级别和学习目标组配额抽取 40 题，可复制生成种子复用相同题目与顺序。多选题必须全部选对，漏选、错选及未答均为 0 分。</p><a className="text-link" href="https://istqb.org/wp-content/uploads/2026/05/ISTQB_Exam-Structure-Tables_v1.18.pdf" target="_blank" rel="noreferrer">ISTQB 官方考试结构表 <ExternalLink size={14}/></a><hr/><h2>你的数据，留在你的浏览器</h2><p>无需登录。学习记录保存在本机，其他用户无法通过网站查看。更换浏览器、清除网站数据或使用隐私模式，可能无法保留之前的记录。</p><p>错题答对后仍会保留，确认掌握后可在错题本手动移除。</p><DataTransfer/>{storageError&&<button className="button secondary" onClick={backup}><ArrowDownToLine size={15}/>下载原始记录以备恢复</button>}<button className="danger-link" onClick={()=>setReset(true)}><Trash2 size={14}/>清空本机学习记录</button></section></div>{reset&&<ConfirmDialog title="清空当前浏览器的学习记录？" confirmText="清空记录" onCancel={()=>setReset(false)} onConfirm={()=>{localStorage.removeItem(STORAGE_KEY);window.location.assign('/')}}><p>将删除练习进度、错题、考试记录及进行中的考试。建议先导出备份，此操作无法撤销。</p></ConfirmDialog>}</>
+  return <><div className="page-heading"><div><div className="eyebrow">A LITTLE CONTEXT</div><h1>关于这间练习室<span className="heading-dot">.</span></h1><p>让资料更好用，让练习更专注。</p></div></div><div className="about-grid"><section className="panel about-panel"><h2>题库来源</h2><p>题目来自你提供的 CTFL 基础级 4.0.1 中文模拟卷。四套试卷各 40 题，A 卷另有 26 道附加题，共 186 道。A–D 是不同试卷，不代表难度等级。</p><p>题目与解析版权归 ISTQB®／CSTQB® 及相应作者所有，中文翻译、编辑及出版由 CSTQB 负责。本站为非官方、非商业学习工具，不提供认证或正式考试服务。</p><p>题目及解析保留原文。图表使用源文件裁图，可通过“查看原题”“对照原版解析”核对排版与出处。</p><p>按试卷下载完整试题与答案解析，共 8 份原始 PDF。</p><div className="source-file-list">{bank.sources.map(s=><div key={s.paper}><Badge tone="green">{s.paper} 卷</Badge><div className="source-downloads">{[{label:"试题 PDF",file:s.questionFile},{label:"答案解析 PDF",file:s.answerFile}].map(file=><a key={file.file} className="source-download" href={`/sources/${encodeURIComponent(file.file)}`} download={file.file} aria-label={`下载 ${s.paper} 卷${file.label}`} title={file.file}><ArrowDownToLine size={16}/><span><strong>{file.label}</strong><small>{file.file}</small></span></a>)}</div></div>)}</div></section><section className="panel about-panel"><h2>考试与记录</h2><p>当前题库版本 {bank.bankVersion} · 默认抽题算法 {CURRENT_ALGORITHM_VERSION}。</p><p>模拟考试默认 40 题、60 分钟、满分 40 分，26 分及格。A–D 原卷考试不包含附加题；混合模拟从全部 186 题中按官方章节、知识级别和学习目标组配额抽取 40 题，可复制生成种子复用相同题目与顺序。多选题必须全部选对，漏选、错选及未答均为 0 分。</p><a className="text-link" href="https://istqb.org/wp-content/uploads/2026/05/ISTQB_Exam-Structure-Tables_v1.18.pdf" target="_blank" rel="noreferrer">ISTQB 官方考试结构表 <ExternalLink size={14}/></a><hr/><h2>你的数据，留在你的浏览器</h2><p>无需登录。学习记录保存在本机，其他用户无法通过网站查看。更换浏览器、清除网站数据或使用隐私模式，可能无法保留之前的记录。</p><p>错题答对后仍会保留，确认掌握后可在错题本手动移除。</p><DataTransfer/>{storageError&&<button className="button secondary" onClick={backup}><ArrowDownToLine size={15}/>下载原始记录以备恢复</button>}<button className="danger-link" onClick={()=>setReset(true)}><Trash2 size={14}/>清空本机学习记录</button></section></div>{reset&&<ConfirmDialog title="清空当前浏览器的学习记录？" confirmText="清空记录" onCancel={()=>setReset(false)} onConfirm={()=>{localStorage.removeItem(STORAGE_KEY);window.location.assign('/')}}><p>将删除练习进度、错题、考试记录及进行中的考试。建议先导出备份，此操作无法撤销。</p></ConfirmDialog>}</>
 }
 
 export default function App() {
   const [bank,setBank]=useState<Bank|null>(null)
   const [error,setError]=useState('')
-  useEffect(()=>{const controller=new AbortController();fetch('/data/questions.json',{signal:controller.signal}).then(r=>{if(!r.ok)throw new Error('题库加载失败');return r.json()}).then((data:Bank)=>{if(data.version!==1||data.questions?.length!==186)throw new Error('题库版本或内容不完整');setBank(data)}).catch(e=>{if(e.name!=='AbortError')setError(String(e))});return()=>controller.abort()},[])
+  useEffect(()=>{let cancelled=false;loadCurrentBank().then(data=>{if(!cancelled)setBank(data)}).catch(e=>{if(!cancelled)setError(String(e))});return()=>{cancelled=true}},[])
   if(error)return <div className="loading-page"><XCircle size={36}/><h1>暂时无法加载题库</h1><p>{error}</p><button className="button primary" onClick={()=>location.reload()}>重新加载</button></div>
   if(!bank)return <div className="loading-page"><span className="brand-symbol"><BookCheck size={27}/></span><h1>ISTQB 练习室</h1><p>正在准备你的学习空间…</p><div className="loading-line"/></div>
   return <StudyProvider bank={bank}><BrowserRouter><Shell/></BrowserRouter></StudyProvider>

@@ -1,7 +1,9 @@
 import fs from 'node:fs'
 import assert from 'node:assert/strict'
 import {createHash} from 'node:crypto'
-const bank=JSON.parse(fs.readFileSync(new URL('../public/data/questions.json',import.meta.url),'utf8'))
+import {fileURLToPath} from 'node:url'
+import {validateReleases} from './validate-releases.mjs'
+export function validateBank(bank) {
 assert.equal(bank.version,1)
 assert.deepEqual(bank.sources.map(source=>source.paper),[...'ABCD'])
 for(const source of bank.sources){
@@ -47,3 +49,10 @@ for(const q of bank.questions){
 for(const id of ['A-14','A-33','A-A6','C-31'])assert.ok(bank.questions.find(q=>q.id===id).stemImages.length,`${id}: required table/chart missing`)
 assert.ok(bank.questions.find(q=>q.id==='B-13').explanation.includes('系统规格说明'),'B-13: first explanation paragraph missing')
 console.log(`Validated ${bank.questions.length} questions (${JSON.stringify(counts)}), answers, chapters, explanations, source images and 8 original PDFs (SHA-256).`)
+
+}
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const bank=JSON.parse(fs.readFileSync(new URL('../public/data/questions.json',import.meta.url),'utf8'))
+  validateBank(bank)
+  validateReleases()
+}

@@ -66,7 +66,7 @@ describe('official CTFL mixed-paper allocation',()=>{
     const generated=generateMixedPaper(bank.questions,fingerprint,seedFor(42))
     expect(generateMixedPaper(bank.questions,fingerprint,` \n${seedFor(42).toLowerCase()}\t `)).toEqual(generated)
     const random=randomMixedSeed(fingerprint)
-    expect(random).toMatch(/^ISTQB-M1-[0-9A-F]{12}-[0-9A-F]{8}$/)
+    expect(random).toMatch(/^M1-1-[0-9A-Z]{7}$/)
     expect(generateMixedPaper(bank.questions,fingerprint,random).questionIds).toHaveLength(40)
   })
   it('rejects malformed, unsupported and incompatible seeds',()=>{
