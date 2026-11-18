@@ -21,7 +21,7 @@ export function finishState(state: StudyState, questions: Question[], now = Date
   const active = state.activeExam
   if (!active) return state
   const completed: Attempt = {...active, status: 'completed', endedAt: Math.max(active.startedAt, Math.min(now, active.deadline))}
-  const wrong = questions.filter(q => active.questionIds.includes(q.id) && !isCorrect(active.answers[q.id], q.correctAnswers)).map(q => q.id)
+  const wrong = questions.filter(q => active.questionIds.includes(q.id) && active.answers[q.id]?.length > 0 && !isCorrect(active.answers[q.id], q.correctAnswers)).map(q => q.id)
   return {...state, activeExam: null, history: [completed, ...state.history.filter(a => a.id !== completed.id)], mistakes: [...new Set([...state.mistakes, ...wrong])]}
 }
 export function getResult(attempt: Attempt, questions: Question[]) {

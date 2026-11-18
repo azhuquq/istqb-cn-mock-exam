@@ -39,10 +39,39 @@ describe('real exam lifecycle',()=>{
     expect(r.score).toBe(count)
     expect(r.passed).toBe(count>=26)
     expect(r.unanswered).toBe(40-count)
-    expect(finished.mistakes).toHaveLength(41-count)
-    expect(finished.mistakes).toContain('A-1')
+    expect(finished.mistakes).toEqual(['A-1'])
     expect(finishState(finished,bank.questions)).toBe(finished)
     expect(r.chapters.reduce((s,c)=>s+c.correct,0)).toBe(count)
+  })
+  it.each([false,true])('collects only answered mistakes on settlement (timeout: %s)',timeout=>{
+    const a=startAttempt('B',bank.questions,1000)
+    const items=bank.questions.filter(q=>a.questionIds.includes(q.id))
+    const singles=items.filter(q=>q.selectionCount===1)
+    const [wrong,correct,cleared,flagged]=singles
+    const partial=items.find(q=>q.selectionCount>1)!
+    a.answers={
+      [wrong.id]:[wrong.options.find(o=>!wrong.correctAnswers.includes(o.id))!.id],
+      [correct.id]:correct.correctAnswers,
+      [partial.id]:[partial.correctAnswers[0]],
+      [cleared.id]:[],
+    }
+    a.flags=[cleared.id,flagged.id]
+    const state={...freshState(),activeExam:a,mistakes:['A-1',wrong.id,cleared.id]}
+    const finished=finishState(state,bank.questions,timeout?a.deadline+20000:2000)
+    expect(finished.mistakes).toEqual(['A-1',wrong.id,cleared.id,partial.id])
+    const result=getResult(finished.history[0],bank.questions)
+    expect(result.score).toBe(1)
+    expect(result.unanswered).toBe(37)
+    expect(finished.history[0].answers).toEqual(a.answers)
+    expect(state.activeExam).toBe(a)
+  })
+  it('does not collect mistakes when an exam is submitted without any answers',()=>{
+    const a=startAttempt('A',bank.questions,1000)
+    a.answers={'A-1':[]}
+    a.flags=['A-1','A-2']
+    const finished=finishState({...freshState(),activeExam:a},bank.questions,2000)
+    expect(finished.mistakes).toEqual([])
+    expect(getResult(finished.history[0],bank.questions)).toMatchObject({score:0,unanswered:40})
   })
   it('preserves active deadline, answers, flags and position through reload',()=>{
     const a=startAttempt('D',bank.questions,1000)
