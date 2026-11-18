@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.vercel/
+*.tsbuildinfo
+.env*
+artifacts/
+__pycache__/
+.vercel
+.agents/
+.codex/
+.aws/
