@@ -87,7 +87,7 @@ export function exportStudy(state: StudyState): string {
 export function importStudy(code: string): StudyState {
   if (code.length > MAX_BACKUP_CODE_LENGTH) throw new Error('备份码过大，最多支持 8 MiB 的原始学习记录。')
   const parts = code.trim().split(':')
-  if (parts.length !== 4 || parts[0] !== PREFIX || !/^[1-9]\d{0,7}$/.test(parts[1]) || !/^[a-f0-9]{8}$/.test(parts[2])) throw new Error(INVALID)
+  if (parts.length !== 4 || parts[0].toLowerCase() !== PREFIX.toLowerCase() || !/^[1-9]\d{0,7}$/.test(parts[1]) || !/^[a-f0-9]{8}$/.test(parts[2])) throw new Error(INVALID)
   const size = Number(parts[1])
   if (size > MAX_BACKUP_BYTES) throw new Error('备份中的学习记录超过 8 MiB，无法导入。')
   // Allow line wrapping in a copied code, but require canonical Base64.
