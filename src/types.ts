@@ -8,12 +8,14 @@ export interface Question {
 }
 export interface Source {paper: string; questionFile: string; answerFile: string; questionSha256: string; answerSha256: string}
 export interface Bank {version: number; syllabus: string; sources: Source[]; questions: Question[]}
-export interface Attempt {
-  id: string; paper: string; questionIds: string[];
+export type FormalPaper = 'A' | 'B' | 'C' | 'D'
+interface AttemptBase {
+  id: string; questionIds: string[];
   answers: Record<string, string[]>; flags: string[];
   startedAt: number; deadline: number; endedAt: number | null;
   status: 'active' | 'completed'; index: number;
 }
+export type Attempt = AttemptBase & ({paper: FormalPaper; seed?: never} | {paper: 'mixed'; seed: string})
 export interface StudyState {
   schemaVersion: 1;
   practice: {filter: string; index: number; answers: Record<string, string[]>; submitted: Record<string, boolean>};
