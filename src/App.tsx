@@ -206,9 +206,45 @@ function DataTransfer() {
   }
   async function copy() {
     setCopying(true);setError('');setNotice('')
-    try {await navigator.clipboard.writeText(exportCode);setNotice('已复制备份码。请妥善保存，备份码可还原你的学习记录。')}
-    catch {document.querySelector<HTMLTextAreaElement>('#study-export')?.select();setNotice('浏览器未允许自动复制，已选中备份码，请长按复制或按 Ctrl/Cmd+C。')}
-    finally {setCopying(false)}
+    const textarea=document.querySelector<HTMLTextAreaElement>('#study-export')
+    let clipboardWrite:Promise<boolean>|null=null
+
+    // Start the modern API while this click still carries user activation.
+    try {
+      if(window.isSecureContext&&navigator.clipboard?.writeText) {
+        clipboardWrite=navigator.clipboard.writeText(exportCode).then(()=>true,()=>false)
+      }
+    } catch {}
+
+    // iOS Safari may reject Clipboard API access. Try the synchronous legacy
+    // command before leaving the click handler, while the user gesture is active.
+    let legacyCopied=false
+    if(textarea&&typeof document.execCommand==='function') {
+      try {
+        textarea.focus({preventScroll:true})
+        textarea.select()
+        textarea.setSelectionRange(0,textarea.value.length)
+        legacyCopied=document.execCommand('copy')
+      } catch {}
+    }
+
+    try {
+      if(legacyCopied||(clipboardWrite&&await clipboardWrite)) {
+        setNotice('已复制备份码。请妥善保存，备份码可还原你的学习记录。')
+      } else {
+        // Keep the complete code selected so the user can use iOS native text selection.
+        if(textarea) {
+          textarea.focus({preventScroll:true})
+          textarea.select()
+          textarea.setSelectionRange(0,textarea.value.length)
+          setNotice('自动复制未成功，备份码已选中。请长按文本并选择「拷贝」。')
+        } else {
+          setError('无法找到备份码文本框，请重新生成备份码后再试。')
+        }
+      }
+    } finally {
+      setCopying(false)
+    }
   }
   function inspect() {
     setError('');setNotice('');setPreview(null)
