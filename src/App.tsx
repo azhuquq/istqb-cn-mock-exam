@@ -225,7 +225,7 @@ function DataTransfer() {
     <div className="transfer-actions"><button className="button secondary" onClick={generate}><ArrowDownToLine size={15}/>{exportCode?'重新生成备份码':'生成导出备份码'}</button>{exportCode&&<button className="button secondary" disabled={copying} onClick={copy}><Copy size={15}/>{copying?'正在复制…':'复制备份码'}</button>}</div>
     {exportCode&&<><label htmlFor="study-export">导出备份码</label><textarea id="study-export" readOnly value={exportCode} onFocus={e=>e.currentTarget.select()} spellCheck={false}/><p className="transfer-hint">这是生成时的记录快照。继续学习后，请重新生成备份。</p></>}
     <label htmlFor="study-import">粘贴备份码以导入</label>
-    <textarea id="study-import" placeholder="ISTQB-LZ4-v1:…" value={importCode} maxLength={MAX_BACKUP_CODE_LENGTH} onChange={e=>{setImportCode(e.target.value);setPreview(null);setError('');setNotice('')}} spellCheck={false}/>
+    <textarea id="study-import" placeholder="ISTQB-LZ4-v1:…" value={importCode} maxLength={MAX_BACKUP_CODE_LENGTH} onChange={e=>{setImportCode(e.target.value);setPreview(null);setError('');setNotice('')}} autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false}/>
     <button className="button secondary" disabled={!importCode.trim()} onClick={inspect}>检查并导入</button>
     <p className="transfer-hint">导入会替换当前浏览器的全部学习记录，建议先导出备份。进行中的考试沿用原截止时间，过期则自动交卷。</p>
     {notice&&<p className="transfer-notice" role="status">{notice}</p>}
