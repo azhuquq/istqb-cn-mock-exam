@@ -24,7 +24,9 @@ export function StudyProvider({bank, children}: {bank: Bank; children: ReactNode
   },[persistence])
   const setState = useCallback(async(update: StudyUpdate)=>{
     if(blocked){setLocalState(update);return}
-    try {await persistence.update(update);return refresh()}
+    const saving=persistence.update(update)
+    try {refresh()} catch {}
+    try {await saving;return refresh()}
     catch {
       try {refresh()} catch {}
       setStorageError('浏览器未能保存学习记录，请检查存储权限或剩余空间。当前页面仍可继续答题，请导出备份以保留未保存的操作。')
@@ -50,12 +52,13 @@ export function StudyProvider({bank, children}: {bank: Bank; children: ReactNode
   useEffect(() => {
     const active=state.activeExam
     const check = () => {
-      if(!active||Date.now()<active.deadline)return
+      const settledAt=Date.now()
+      if(!active||settledAt<active.deadline)return
       void setState(s => {
-        if(!s.activeExam||s.activeExam.id!==active.id||Date.now()<s.activeExam.deadline)return s
+        if(!s.activeExam||s.activeExam.id!==active.id||settledAt<s.activeExam.deadline)return s
         try {
           const source=banks[attemptBankVersion(s.activeExam)]
-          return source?finishState(s,source.questions):s
+          return source?finishState(s,source.questions,settledAt):s
         } catch {return s}
       })
     }

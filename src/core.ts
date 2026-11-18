@@ -19,6 +19,27 @@ export function isCorrect(selected: string[] = [], expected: string[]) {
 export function toggleOption(selected: string[], option: string, count: number) {
   return count === 1 ? (selected.includes(option) ? [] : [option]) : selected.includes(option) ? selected.filter(id => id !== option) : [...selected, option]
 }
+// Commands carry the checked state the user requested, rather than toggling a
+// value that may already have been changed by another window or a retry.
+export function setOption(selected: string[], option: string, count: number, checked: boolean): string[] {
+  if(!checked)return selected.filter(id=>id!==option)
+  if(count===1)return [option]
+  return selected.includes(option)?[...selected]:[...selected,option]
+}
+function editableAttempt(state: StudyState, attemptId: string, occurredAt: number) {
+  const active=state.activeExam
+  return active?.id===attemptId&&Number.isFinite(occurredAt)&&occurredAt>=active.startedAt&&occurredAt<active.deadline?active:null
+}
+export function setExamOption(state: StudyState, attemptId: string, q: Question, option: string, checked: boolean, occurredAt: number): StudyState {
+  const active=editableAttempt(state,attemptId,occurredAt)
+  if(!active||!active.questionIds.includes(q.id)||!q.options.some(o=>o.id===option))return state
+  return {...state,activeExam:{...active,answers:{...active.answers,[q.id]:setOption(active.answers[q.id]||[],option,q.selectionCount,checked)}}}
+}
+export function setExamFlag(state: StudyState, attemptId: string, questionId: string, marked: boolean, occurredAt: number): StudyState {
+  const active=editableAttempt(state,attemptId,occurredAt)
+  if(!active||!active.questionIds.includes(questionId))return state
+  return {...state,activeExam:{...active,flags:marked?[...new Set([...active.flags,questionId])]:active.flags.filter(id=>id!==questionId)}}
+}
 export function startAttempt(paper: string, questions: Question[], now = Date.now(), bankVersion = CURRENT_BANK_VERSION): Attempt {
   if (!/^[A-D]$/.test(paper)) throw new Error('没有找到这套试卷。')
   return {id: crypto.randomUUID(), bankVersion, paper: paper as FormalPaper, questionIds: questions.filter(q => q.paper === paper && !q.supplementary).map(q => q.id), answers: {}, flags: [], startedAt: now, deadline: now + EXAM_DURATION, endedAt: null, status: 'active', index: 0}
@@ -46,11 +67,25 @@ export function updatePracticeAnswer(state: StudyState, id: string, selected: st
   return {...state,practice:reviewing?state.practice:{...state.practice,answers:{...state.practice.answers,[id]:[...selected]},submitted:{...state.practice.submitted,[id]:false},bankVersions:{...state.practice.bankVersions,[id]:bankVersion}},
     mistakeResponses:reviewing?{...state.mistakeResponses,[id]:{answers:[...selected],submitted:false,bankVersion,source:'practice'}}:state.mistakeResponses}
 }
+export function setPracticeOption(state: StudyState, q: Question, option: string, checked: boolean, bankVersion: string, reviewing = false): StudyState {
+  const response=state.mistakeResponses[q.id]
+  const version=reviewing?response?.bankVersion:practiceBankVersion(state,q.id,bankVersion)
+  if((reviewing?response?.submitted:state.practice.submitted[q.id])||(version&&version!==bankVersion)||!q.options.some(o=>o.id===option))return state
+  const selected=reviewing?response?.answers||[]:state.practice.answers[q.id]||[]
+  return updatePracticeAnswer(state,q.id,setOption(selected,option,q.selectionCount,checked),bankVersion,reviewing)
+}
 export function submitPracticeAnswer(state: StudyState, q: Question, selected: string[], bankVersion: string, reviewing = false): StudyState {
   if(reviewing&&!state.mistakes.includes(q.id))return state
   const mistakes=isCorrect(selected,q.correctAnswers)?state.mistakes:[...new Set([...state.mistakes,q.id])]
   return {...state,practice:reviewing?state.practice:{...state.practice,answers:{...state.practice.answers,[q.id]:[...selected]},submitted:{...state.practice.submitted,[q.id]:true},bankVersions:{...state.practice.bankVersions,[q.id]:bankVersion}},mistakes,
     mistakeResponses:mistakes.includes(q.id)?{...state.mistakeResponses,[q.id]:{answers:[...selected],submitted:true,bankVersion,source:'practice'}}:state.mistakeResponses}
+}
+export function submitLatestPracticeAnswer(state: StudyState, q: Question, bankVersion: string, reviewing = false): StudyState {
+  const response=state.mistakeResponses[q.id]
+  const version=reviewing?response?.bankVersion:practiceBankVersion(state,q.id,bankVersion)
+  const selected=reviewing?response?.answers||[]:state.practice.answers[q.id]||[]
+  if((reviewing?response?.submitted:state.practice.submitted[q.id])||version!==bankVersion||selected.length!==q.selectionCount||new Set(selected).size!==selected.length||!selected.every(id=>q.options.some(o=>o.id===id)))return state
+  return submitPracticeAnswer(state,q,selected,bankVersion,reviewing)
 }
 export function removeMistake(state: StudyState, id: string): StudyState {
   const mistakeResponses={...state.mistakeResponses}
