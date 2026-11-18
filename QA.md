@@ -40,10 +40,18 @@
 
 Vercel 团队：`azhuquqs-projects`；项目：`istqb-mock-exam`。
 
-最终功能版本部署 ID：`dpl_2Mde8D5htg72TAkBvja7q1FdJyWo`，Vercel Inspect 返回 `Ready`。
+初版部署 ID：`dpl_2Mde8D5htg72TAkBvja7q1FdJyWo`，Vercel Inspect 返回 `Ready`。
 
 自定义域名：https://istqb-mock-exam.azhuquq.com
 
 自定义域名已关联项目。Vercel 域名验证返回 `ok: true`、`misconfigured: false`、项目域名 `verified: true`。用户选择的 CNAME 为 `cname-china.vercel-dns.com`，平台接受该配置。
 
 Vercel 已签发覆盖此域名的自动续期证书，证书 ID 为 `cert_8kzcgjsWMAAX28i9QKIHT33T`，到期时间为 2027-02-16T11:14:54+00:00。线上发布状态、DNS 与证书通过 Vercel 平台检查确认；应用交互在本地生产构建中验证。
+
+## GitHub 发布与自动部署
+
+公开仓库：https://github.com/azhuquq/istqb-mock-exam
+
+功能提交：`d445154b5ae56010dca5aa485a7436a40d5b1a5d`。已用 GitHub CLI 确认仓库为 `PUBLIC`，远程 `main` 与本地提交一致。
+
+Vercel 已连接该 GitHub 仓库，生产分支为 `main`；本次推送触发生产构建。功能实现的部署 ID 为 `dpl_H7Ak2zEw5FagEhvwispFEvR1WUcM`，Vercel Inspect 确认 `Ready`，正式域名已指向本次部署且 `verified: true`。

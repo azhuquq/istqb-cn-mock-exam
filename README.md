@@ -51,6 +51,8 @@ npm test
 
 ## Vercel
 
+GitHub 仓库已连接 Vercel 项目。推送 `main` 自动部署生产站，其他分支生成预览。
+
 `vercel.json` 已配置 Vite 构建与 SPA 路由。构建先校验题库再执行 TypeScript 检查及生产打包；输出目录为 `dist`。
 
 ```sh
