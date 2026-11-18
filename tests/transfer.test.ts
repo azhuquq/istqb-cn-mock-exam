@@ -42,6 +42,18 @@ describe('LZ4 copy/paste backup',()=>{
     expect(importStudy(code)).toEqual(state)
     expect(importStudy(` \n${code.replace(/(.{70})/g,'$1\n')}\n `)).toEqual(state)
   })
+  it('accepts case-insensitive backup prefixes without changing the Base64 payload',()=>{
+    const state=populated()
+    const code=exportStudy(state)
+    const variants=[
+      code,
+      code.replace(/^ISTQB-LZ4-v1:/,'istqb-lz4-v1:'),
+      code.replace(/^ISTQB-LZ4-v1:/,'Istqb-Lz4-v1:'),
+      code.replace(/^ISTQB-LZ4-v1:/,'ISTQB-LZ4-V1:'),
+    ]
+    for(const value of variants) expect(importStudy(value)).toEqual(state)
+    expect(()=>importStudy(code.replace(/^ISTQB-LZ4-v1:/,'NOT-ISTQB-LZ4-v1:'))).toThrow()
+  })
   it('preserves an expired deadline for normal automatic settlement, never restarting the timer',()=>{
     const before=populated()
     const after=importStudy(exportStudy(before))
