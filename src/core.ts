@@ -1,11 +1,14 @@
-import type {Attempt, FormalPaper, Question, StudyState} from './types'
-import {isStoredMixedSeed, parseMixedSeed, type MixedPaper} from './mixed'
-import {CURRENT_BANK_VERSION, isBankVersion} from './versions'
+import type {Attempt, FormalPaper, MistakeResponse, Question, StudyState} from './types'
+import {isStoredMixedSeed, parseMixedSeed, seedBankVersion, type MixedPaper} from './mixed'
+import {CURRENT_BANK_VERSION, LEGACY_BANK_VERSION, isBankVersion} from './versions'
 
 export const STORAGE_KEY = 'istqb-study-v1'
 export const CHAPTERS = ['测试基础', '整个软件开发生命周期中的测试', '静态测试', '测试分析与设计', '管理测试活动', '测试工具']
 export const EXAM_DURATION = 60 * 60 * 1000
-export const freshState = (): StudyState => ({schemaVersion: 1, practice: {filter: 'paper:A', index: 0, answers: {}, submitted: {}}, activeExam: null, history: [], mistakes: []})
+export const freshState = (): StudyState => ({schemaVersion: 1, practice: {filter: 'paper:A', index: 0, answers: {}, submitted: {}}, activeExam: null, history: [], mistakes: [], mistakeResponses: {}})
+export function attemptBankVersion(attempt: Attempt): string {
+  return attempt.bankVersion || (attempt.paper === 'mixed' ? seedBankVersion(attempt.seed) : LEGACY_BANK_VERSION)
+}
 export function isCorrect(selected: string[] = [], expected: string[]) {
   return selected.length === expected.length && new Set(selected).size === selected.length && expected.every(id => selected.includes(id))
 }
@@ -30,7 +33,38 @@ export function finishState(state: StudyState, questions: Question[], now = Date
   if (!active) return state
   const completed: Attempt = {...active, status: 'completed', endedAt: Math.max(active.startedAt, Math.min(now, active.deadline))}
   const wrong = questions.filter(q => active.questionIds.includes(q.id) && active.answers[q.id]?.length > 0 && !isCorrect(active.answers[q.id], q.correctAnswers)).map(q => q.id)
-  return {...state, activeExam: null, history: [completed, ...state.history.filter(a => a.id !== completed.id)], mistakes: [...new Set([...state.mistakes, ...wrong])]}
+  const mistakeResponses={...state.mistakeResponses}
+  for(const id of wrong)mistakeResponses[id]={answers:[...active.answers[id]],submitted:true,bankVersion:attemptBankVersion(active),source:'exam',attemptId:active.id}
+  return {...state, activeExam: null, history: [completed, ...state.history.filter(a => a.id !== completed.id)], mistakes: [...new Set([...state.mistakes, ...wrong])],mistakeResponses}
+}
+export function updatePracticeAnswer(state: StudyState, id: string, selected: string[], bankVersion: string, reviewing = false): StudyState {
+  return {...state,practice:{...state.practice,answers:{...state.practice.answers,[id]:[...selected]},submitted:{...state.practice.submitted,[id]:false}},
+    mistakeResponses:reviewing?{...state.mistakeResponses,[id]:{answers:[...selected],submitted:false,bankVersion,source:'practice'}}:state.mistakeResponses}
+}
+export function submitPracticeAnswer(state: StudyState, q: Question, selected: string[], bankVersion: string): StudyState {
+  const mistakes=isCorrect(selected,q.correctAnswers)?state.mistakes:[...new Set([...state.mistakes,q.id])]
+  return {...state,practice:{...state.practice,answers:{...state.practice.answers,[q.id]:[...selected]},submitted:{...state.practice.submitted,[q.id]:true}},mistakes,
+    mistakeResponses:mistakes.includes(q.id)?{...state.mistakeResponses,[q.id]:{answers:[...selected],submitted:true,bankVersion,source:'practice'}}:state.mistakeResponses}
+}
+export function removeMistake(state: StudyState, id: string): StudyState {
+  const mistakeResponses={...state.mistakeResponses}
+  delete mistakeResponses[id]
+  return {...state,mistakes:state.mistakes.filter(value=>value!==id),mistakeResponses}
+}
+
+function recoverMistakeResponses(state: StudyState): Record<string,MistakeResponse> {
+  const responses: Record<string,MistakeResponse>={}
+  const history=[...state.history].sort((a,b)=>(b.endedAt??b.deadline)-(a.endedAt??a.deadline))
+  for(const id of state.mistakes) {
+    const attempt=history.find(a=>a.questionIds.includes(id)&&a.answers[id]?.length)
+    // Keep deliberate retries; otherwise recover the latest recorded exam answer.
+    if(attempt&&state.practice.submitted[id]!==false) {
+      responses[id]={answers:[...attempt.answers[id]],submitted:true,bankVersion:attemptBankVersion(attempt),source:'exam',attemptId:attempt.id}
+    } else if(Object.hasOwn(state.practice.answers,id)||Object.hasOwn(state.practice.submitted,id)) {
+      responses[id]={answers:[...(state.practice.answers[id]||[])],submitted:!!state.practice.submitted[id],bankVersion:LEGACY_BANK_VERSION,source:'practice'}
+    }
+  }
+  return responses
 }
 export function getResult(attempt: Attempt, questions: Question[]) {
   const items = attempt.questionIds.map(id => questions.find(q => q.id === id)).filter((q): q is Question => !!q)
@@ -77,6 +111,11 @@ export function parseState(raw: string | null): StudyState {
   if (!record(value) || value.schemaVersion !== 1 || !record(value.practice) || typeof value.practice.filter !== 'string' || !Number.isInteger(value.practice.index) || Number(value.practice.index) < 0
       || !answers(value.practice.answers) || !record(value.practice.submitted) || !Object.entries(value.practice.submitted).every(([id,v]) => questionId(id) && typeof v === 'boolean')
       || !strings(value.mistakes) || !value.mistakes.every(questionId) || !Array.isArray(value.history) || !value.history.every(v => validAttempt(v) && v.status === 'completed')
-      || (value.activeExam !== null && (!validAttempt(value.activeExam) || value.activeExam.status !== 'active'))) throw new Error('本地记录格式不兼容或已损坏。原记录已保留，请先导出备份再重置。')
-  return value as unknown as StudyState
+      || (value.activeExam !== null && (!validAttempt(value.activeExam) || value.activeExam.status !== 'active'))
+      || (value.mistakeResponses !== undefined && (!record(value.mistakeResponses) || !Object.entries(value.mistakeResponses).every(([id,response])=>
+        questionId(id) && (value.mistakes as string[]).includes(id) && record(response) && strings(response.answers) && response.answers.every(x=>/^[A-E]$/.test(x))
+        && typeof response.submitted==='boolean' && isBankVersion(response.bankVersion) && (response.source==='exam'||response.source==='practice')
+        && (response.attemptId===undefined||typeof response.attemptId==='string'))))) throw new Error('本地记录格式不兼容或已损坏。原记录已保留，请先导出备份再重置。')
+  const state=value as unknown as StudyState
+  return value.mistakeResponses===undefined?{...state,mistakeResponses:recoverMistakeResponses(state)}:state
 }

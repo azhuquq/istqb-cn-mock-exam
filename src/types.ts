@@ -16,8 +16,13 @@ interface AttemptBase {
   status: 'active' | 'completed'; index: number;
 }
 export type Attempt = AttemptBase & ({paper: FormalPaper; seed?: never} | {paper: 'mixed'; seed: string})
+export interface MistakeResponse {
+  answers: string[]; submitted: boolean; bankVersion: string;
+  source: 'exam' | 'practice'; attemptId?: string;
+}
 export interface StudyState {
   schemaVersion: 1;
   practice: {filter: string; index: number; answers: Record<string, string[]>; submitted: Record<string, boolean>};
   activeExam: Attempt | null; history: Attempt[]; mistakes: string[];
+  mistakeResponses: Record<string,MistakeResponse>;
 }

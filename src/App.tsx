@@ -1,13 +1,14 @@
 import React, {useEffect, useState, type ReactNode} from 'react'
 import {BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams} from 'react-router-dom'
 import {ArrowDownToLine, Copy, ArrowLeft, ArrowRight, BookCheck, BookOpen, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, CircleHelp, Clock3, ExternalLink, FileCheck2, Flag, GraduationCap, History, LayoutDashboard, ListFilter, Menu, Play, RotateCcw, ShieldCheck, Sparkles, Target, Trash2, X, XCircle} from 'lucide-react'
-import {abandonState, CHAPTERS, EXAM_DURATION, filterQuestions, finishState, formatTime, examName, getResult, isCorrect, startAttempt, STORAGE_KEY, toggleOption} from './core'
+import {abandonState, CHAPTERS, EXAM_DURATION, filterQuestions, finishState, formatTime, examName, getResult, isCorrect, startAttempt, STORAGE_KEY, toggleOption, updatePracticeAnswer, submitPracticeAnswer, removeMistake} from './core'
 import {StudyProvider, useStudy} from './store'
 import {QuestionShortcuts} from './QuestionShortcuts'
 import {MixedPage, SeedControl} from './MixedExam'
 import {loadCurrentBank} from './banks'
 import {CURRENT_ALGORITHM_VERSION} from './versions'
 import {exportStudy, importStudy, MAX_BACKUP_CODE_LENGTH} from './transfer'
+import {createMistakeExport} from './mistake-export'
 import type {Attempt, Bank, Question, StudyState} from './types'
 
 const paperColors: Record<string,string> = {A:'mint',B:'blue',C:'violet',D:'sand',mixed:'mint'}
@@ -81,33 +82,40 @@ function FilterSelect({value,onChange}:{value:string;onChange:(v:string)=>void})
 function filterName(filter:string) {const [kind,value]=filter.split(':');return kind==='chapter'?`第 ${value} 章 · ${CHAPTERS[Number(value)-1]}`:kind==='extra'?'A 卷附加题':kind==='mistakes'?'错题复习':`模拟卷 ${value}`}
 
 function Practice() {
-  const {bank,state,setState} = useStudy()
+  const {bank,state,setState,mistakeQuestions} = useStudy()
   const [params,setParams] = useSearchParams()
   const requested=params.get('filter')||state.practice.filter
   const valid=/^(paper:[A-D]|chapter:[1-6]|extra|mistakes)$/.test(requested)?requested:'paper:A'
+  const questionPool=valid==='mistakes'?mistakeQuestions:bank.questions
   useEffect(()=>{if(state.practice.filter!==valid)setState(s=>({...s,practice:{...s.practice,filter:valid,index:0}}))},[valid,state.practice.filter,setState])
-  const items=filterQuestions(bank.questions,valid,state.mistakes)
+  const items=filterQuestions(questionPool,valid,state.mistakes)
   const requestedQuestion=params.get('question')
   useEffect(()=>{
     if(!requestedQuestion)return
-    const target=filterQuestions(bank.questions,valid,state.mistakes).findIndex(q=>q.id===requestedQuestion)
-    if(target>=0)setState(s=>({...s,practice:{...s.practice,index:target}}))
+    const target=filterQuestions(questionPool,valid,state.mistakes).findIndex(q=>q.id===requestedQuestion)
+    if(target>=0)setState(s=>s.practice.index===target?s:{...s,practice:{...s.practice,index:target}})
     setParams({filter:valid},{replace:true})
-  },[requestedQuestion,valid,bank,state.mistakes,setParams,setState])
+  },[requestedQuestion,valid,questionPool,state.mistakes,setParams,setState])
   const index=Math.min(state.practice.filter===valid?state.practice.index:0,Math.max(0,items.length-1))
   const q=items[index]
-  const submitted=!!state.practice.submitted[q?.id]
-  const selected=state.practice.answers[q?.id]||[]
+  const reviewing=valid==='mistakes'
+  const response=reviewing?state.mistakeResponses[q?.id]:undefined
+  const submitted=reviewing?!!response?.submitted:!!state.practice.submitted[q?.id]
+  const selected=reviewing?response?.answers||[]:state.practice.answers[q?.id]||[]
+  const responseBankVersion=response?.bankVersion||bank.bankVersion
   const go=(i:number)=>{setState(s=>({...s,practice:{...s.practice,index:i}}));window.scrollTo({top:0,behavior:'smooth'})}
-  function choose(id:string) {setState(s=>({...s,practice:{...s.practice,answers:{...s.practice.answers,[q.id]:toggleOption(s.practice.answers[q.id]||[],id,q.selectionCount)}}}))}
-  function submit() {setState(s=>({...s,practice:{...s.practice,submitted:{...s.practice.submitted,[q.id]:true}},mistakes:isCorrect(selected,q.correctAnswers)?s.mistakes:[...new Set([...s.mistakes,q.id])]}))}
+  function choose(id:string) {setState(s=>updatePracticeAnswer(s,q.id,toggleOption(reviewing?s.mistakeResponses[q.id]?.answers||[]:s.practice.answers[q.id]||[],id,q.selectionCount),responseBankVersion,reviewing))}
+  function submit() {setState(s=>submitPracticeAnswer(s,q,selected,responseBankVersion))}
   return <><div className="page-heading"><div><div className="eyebrow">PRACTICE MAKES PROGRESS</div><h1>题库练习<span className="heading-dot">.</span></h1><p>不急着做下一题，先把这一题真正理解。</p></div><FilterSelect value={valid} onChange={filter=>setParams({filter})}/></div>
     {!q?<Empty title="这里暂时没有错题" icon={<CheckCircle2/>}><p>继续练习，答错的题目会自动收集在这里。</p><Link className="button primary" to="/practice?filter=paper:A">开始练习 <ArrowRight size={15}/></Link></Empty>:<div className="question-layout"><div className="question-main"><div className="session-bar"><span>{filterName(valid)}</span><span><strong>{index+1}</strong> / {items.length} 题</span></div><Progress value={(index+1)/items.length*100}/><QuestionCard q={q} selected={selected} onChoose={choose} reveal={submitted}/>
-      <div className="question-actions"><button className="button secondary" disabled={index===0} onClick={()=>go(index-1)}><ChevronLeft size={16}/>上一题</button><div>{submitted?<button className="button secondary" onClick={()=>setState(s=>({...s,practice:{...s.practice,answers:{...s.practice.answers,[q.id]:[]},submitted:{...s.practice.submitted,[q.id]:false}}}))}><RotateCcw size={15}/>再做一次</button>:<button className="button primary" data-question-enter disabled={selected.length!==q.selectionCount} onClick={submit}>提交答案 <Check size={16}/></button>}<button className="button primary" disabled={index===items.length-1} onClick={()=>go(index+1)}>下一题 <ChevronRight size={16}/></button></div></div>
+      <div className="question-actions"><button className="button secondary" disabled={index===0} onClick={()=>go(index-1)}><ChevronLeft size={16}/>上一题</button><div>{submitted?<button className="button secondary" onClick={()=>setState(s=>updatePracticeAnswer(s,q.id,[],responseBankVersion,reviewing))}><RotateCcw size={15}/>再做一次</button>:<button className="button primary" data-question-enter disabled={selected.length!==q.selectionCount} onClick={submit}>提交答案 <Check size={16}/></button>}<button className="button primary" disabled={index===items.length-1} onClick={()=>go(index+1)}>下一题 <ChevronRight size={16}/></button></div></div>
       <QuestionShortcuts optionIds={q.options.map(o=>o.id)} onChoose={submitted?undefined:choose} onEnter={!submitted&&selected.length===q.selectionCount?submit:undefined} onPrevious={index>0?()=>go(index-1):undefined} onNext={index<items.length-1?()=>go(index+1):undefined}/>
       {submitted&&<Explanation q={q} selected={selected}/>}
     </div><aside className="question-aside"><div className="panel navigator practice-navigator"><div className="panel-title">练习导航 <span>{items.length} 题</span></div><div className="number-grid practice-grid">{items.map((item,i)=>{
-      const verdict=state.practice.submitted[item.id]?(isCorrect(state.practice.answers[item.id],item.correctAnswers)?'correct':'incorrect'):''
+      const itemResponse=reviewing?state.mistakeResponses[item.id]:undefined
+      const itemSubmitted=reviewing?itemResponse?.submitted:state.practice.submitted[item.id]
+      const itemAnswers=reviewing?itemResponse?.answers:state.practice.answers[item.id]
+      const verdict=itemSubmitted?(isCorrect(itemAnswers,item.correctAnswers)?'correct':'incorrect'):''
       const statusText=verdict==='correct'?'答对':verdict==='incorrect'?'答错':'未提交'
       return <button key={item.id} aria-label={`跳转第 ${i+1} 题，${statusText}`} title={`第 ${i+1} 题 · ${statusText}${i===index?' · 当前题':''}`} aria-current={i===index?'step':undefined} className={`${i===index?'current ':''}${verdict}`} onClick={()=>go(i)}>{i+1}</button>
     })}</div><div className="navigator-legend"><span><i className="legend-correct"/>答对</span><span><i className="legend-wrong"/>答错</span><span><i/>未提交</span><span><i className="legend-current"/>当前题</span></div></div><div className="aside-tip"><ShieldCheck size={18}/><strong>安心练习，自动保存</strong><p>进度保存在当前浏览器中。随时离开，下次接着练。</p></div></aside></div>}
@@ -186,10 +194,27 @@ function Results() {
 }
 
 function Mistakes() {
-  const {bank,state,setState}=useStudy()
+  const {bank,mistakeQuestions,state,setState}=useStudy()
   const [chapter,setChapter]=useState('all')
-  const questions=bank.questions.filter(q=>state.mistakes.includes(q.id)&&(chapter==='all'||q.chapter===Number(chapter)))
-  return <><div className="page-heading"><div><div className="eyebrow">TURN MISTAKES INTO MOMENTUM</div><h1>我的错题<span className="heading-dot">.</span></h1><p>错题不代表退步，重新理解它，就是一次进步。</p></div>{state.mistakes.length>0&&<Link className="button primary" to="/practice?filter=mistakes"><RotateCcw size={15}/>开始错题复习</Link>}</div><div className="list-toolbar"><span>共 <strong>{state.mistakes.length}</strong> 道待复习题目</span><select aria-label="筛选错题章节" value={chapter} onChange={e=>setChapter(e.target.value)}><option value="all">全部章节</option>{CHAPTERS.map((c,i)=><option key={c} value={i+1}>第 {i+1} 章 · {c}</option>)}</select></div>{questions.length?<div className="mistake-list">{questions.map(q=><article className="mistake-row panel" key={q.id}><span className={`paper-letter small ${paperColors[q.paper]}`}>{q.paper}</span><div className="mistake-copy"><div><Badge>{q.selectionCount>1?'多选题':'单选题'}</Badge><span>第 {q.number} 题 · 第 {q.chapter} 章 · {q.learningObjective}</span></div><h3>{q.stem.slice(0,150)}</h3></div><Link className="text-link" to={`/practice?filter=mistakes&question=${q.id}`}>复习 <ArrowRight size={15}/></Link><button className="icon-button remove-mistake" aria-label={`移除 ${q.paper} 卷第 ${q.number} 题`} onClick={()=>setState(s=>({...s,mistakes:s.mistakes.filter(id=>id!==q.id)}))}><Trash2 size={16}/></button></article>)}</div>:<Empty title={state.mistakes.length?'这个章节暂时没有错题':'你的错题本还是空的'} icon={<BookCheck/>}><p>{state.mistakes.length?'试试其他章节，或继续进行专项练习。':'练习或考试中的错题会自动出现在这里。'}</p><Link className="button primary" to="/practice">去练习 <ArrowRight size={15}/></Link></Empty>}</>
+  const [exportError,setExportError]=useState('')
+  const [exportNotice,setExportNotice]=useState('')
+  const questions=mistakeQuestions.filter(q=>chapter==='all'||q.chapter===Number(chapter))
+  function exportJson() {
+    setExportError('');setExportNotice('')
+    try {
+      const now=new Date()
+      const data=createMistakeExport(mistakeQuestions,state,bank.bankVersion,window.location.origin,now)
+      const blob=new Blob([JSON.stringify(data,null,2)+'\n'],{type:'application/json;charset=utf-8'})
+      const url=URL.createObjectURL(blob)
+      const link=document.createElement('a')
+      const date=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-')
+      link.href=url;link.download=`istqb-mistakes-${date}.json`
+      document.body.append(link)
+      try {link.click()} finally {link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000)}
+      setExportNotice(`已开始下载全部 ${data.total} 道错题的 JSON 文件。`)
+    } catch(e) {setExportError(e instanceof Error?e.message:'导出失败，请重试。')}
+  }
+  return <><div className="page-heading"><div><div className="eyebrow">TURN MISTAKES INTO MOMENTUM</div><h1>我的错题<span className="heading-dot">.</span></h1><p>错题不代表退步，重新理解它，就是一次进步。</p></div><div className="mistake-page-actions"><button className="button secondary" disabled={state.mistakes.length===0} onClick={exportJson} aria-label="导出全部错题 JSON" title="导出全部错题，不受章节筛选影响"><ArrowDownToLine size={15}/>导出 JSON</button>{state.mistakes.length>0&&<Link className="button primary" to="/practice?filter=mistakes"><RotateCcw size={15}/>开始错题复习</Link>}</div></div>{exportError&&<p className="mistake-export-message is-error" role="alert">{exportError}</p>}{exportNotice&&<p className="mistake-export-message" role="status">{exportNotice}</p>}<div className="list-toolbar"><span>共 <strong>{state.mistakes.length}</strong> 道待复习题目</span><select aria-label="筛选错题章节" value={chapter} onChange={e=>setChapter(e.target.value)}><option value="all">全部章节</option>{CHAPTERS.map((c,i)=><option key={c} value={i+1}>第 {i+1} 章 · {c}</option>)}</select></div>{questions.length?<div className="mistake-list">{questions.map(q=><article className="mistake-row panel" key={q.id}><span className={`paper-letter small ${paperColors[q.paper]}`}>{q.paper}</span><div className="mistake-copy"><div><Badge>{q.selectionCount>1?'多选题':'单选题'}</Badge><span>第 {q.number} 题 · 第 {q.chapter} 章 · {q.learningObjective}</span></div><h3>{q.stem.slice(0,150)}</h3>{state.mistakeResponses[q.id]?.submitted&&<p className="mistake-answer">{state.mistakeResponses[q.id].source==='exam'?'考试作答':'最近练习'}：<strong>{state.mistakeResponses[q.id].answers.join('、')||'未作答'}</strong><span>正确答案：{q.correctAnswers.join('、')}</span></p>}</div><Link className="text-link" to={`/practice?filter=mistakes&question=${q.id}`}>复习 <ArrowRight size={15}/></Link><button className="icon-button remove-mistake" aria-label={`移除 ${q.paper} 卷第 ${q.number} 题`} onClick={()=>setState(s=>removeMistake(s,q.id))}><Trash2 size={16}/></button></article>)}</div>:<Empty title={state.mistakes.length?'这个章节暂时没有错题':'你的错题本还是空的'} icon={<BookCheck/>}><p>{state.mistakes.length?'试试其他章节，或继续进行专项练习。':'练习或考试中的错题会自动出现在这里。'}</p><Link className="button primary" to="/practice">去练习 <ArrowRight size={15}/></Link></Empty>}</>
 }
 function HistoryPage() {
   const {state,getAttemptBank}=useStudy()

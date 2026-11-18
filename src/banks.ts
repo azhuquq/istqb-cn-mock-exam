@@ -1,8 +1,9 @@
-import type {Attempt, Bank, StudyState} from './types'
+import type {Bank, StudyState} from './types'
 import {bankFingerprint, generateMixedPaper, parseMixedSeed, seedBankVersion} from './mixed'
 import {getAlgorithm} from './algorithms'
-import {finishState, parseState} from './core'
-import {BANK_RELEASES, CURRENT_BANK_VERSION, LEGACY_BANK_VERSION} from './versions'
+import {attemptBankVersion, finishState, parseState} from './core'
+import {BANK_RELEASES, CURRENT_BANK_VERSION} from './versions'
+export {attemptBankVersion} from './core'
 
 export type BankLoader = (version: string) => Promise<Bank>
 export function createBankLoader(fetcher: typeof fetch = fetch): BankLoader {
@@ -30,12 +31,12 @@ export function createBankLoader(fetcher: typeof fetch = fetch): BankLoader {
 }
 export const loadBank = createBankLoader()
 export const loadCurrentBank = () => loadBank(CURRENT_BANK_VERSION)
-export function attemptBankVersion(attempt: Attempt): string {
-  return attempt.bankVersion || (attempt.paper === 'mixed' ? seedBankVersion(attempt.seed) : LEGACY_BANK_VERSION)
+export function studyBankVersions(state: StudyState): string[] {
+  const attempts = state.activeExam ? [state.activeExam,...state.history] : state.history
+  return [...new Set([...attempts.map(attemptBankVersion),...Object.values(state.mistakeResponses).map(response=>response.bankVersion)])].sort()
 }
 export async function loadStudyBanks(state: StudyState, loader: BankLoader = loadBank): Promise<Record<string,Bank>> {
-  const attempts = state.activeExam ? [state.activeExam,...state.history] : state.history
-  const versions = [...new Set(attempts.map(attemptBankVersion))]
+  const versions=studyBankVersions(state)
   return Object.fromEntries(await Promise.all(versions.map(async version=>[version,await loader(version)])))
 }
 export async function bankForSeed(seed: string, loader: BankLoader = loadBank) {

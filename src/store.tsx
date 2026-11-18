@@ -1,9 +1,9 @@
-import {createContext, useContext, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction} from 'react'
+import {createContext, useContext, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction} from 'react'
 import {finishState, freshState, parseState, STORAGE_KEY} from './core'
-import {attemptBankVersion, loadBank, restoreStudyState} from './banks'
-import type {Attempt, Bank, StudyState} from './types'
+import {attemptBankVersion, loadBank, restoreStudyState, studyBankVersions} from './banks'
+import type {Attempt, Bank, Question, StudyState} from './types'
 
-interface StudyContext {bank: Bank; state: StudyState; setState: Dispatch<SetStateAction<StudyState>>; replaceState: (next: StudyState) => Promise<void>; getAttemptBank: (attempt: Attempt) => Bank; storageError: string; dismissError: () => void}
+interface StudyContext {bank: Bank; state: StudyState; setState: Dispatch<SetStateAction<StudyState>>; replaceState: (next: StudyState) => Promise<void>; getAttemptBank: (attempt: Attempt) => Bank; mistakeQuestions: Question[]; storageError: string; dismissError: () => void}
 const Context = createContext<StudyContext | null>(null)
 export const useStudy = () => {const value = useContext(Context); if (!value) throw new Error('Missing study provider'); return value}
 
@@ -17,11 +17,11 @@ export function StudyProvider({bank, children}: {bank: Bank; children: ReactNode
   const [retry,setRetry] = useState(0)
   let versions: string[] = [], versionError = ''
   try {
-    const attempts=state.activeExam?[state.activeExam,...state.history]:state.history
-    versions=[...new Set(attempts.map(attemptBankVersion))].sort()
+    versions=studyBankVersions(state)
   } catch(e) {versionError=e instanceof Error?e.message:'无法识别记录的题库版本。'}
   const versionsKey=versions.join(',')
   const waiting=versions.some(version=>!banks[version])
+  const mistakeQuestions=useMemo(()=>state.mistakes.map(id=>(banks[state.mistakeResponses[id]?.bankVersion]||bank).questions.find(q=>q.id===id)).filter((q):q is Question=>!!q),[state.mistakes,state.mistakeResponses,banks,bank])
   useEffect(()=>{
     let cancelled=false
     setBankError('')
@@ -71,5 +71,5 @@ export function StudyProvider({bank, children}: {bank: Bank; children: ReactNode
     const url=URL.createObjectURL(new Blob([localStorage.getItem(STORAGE_KEY)||'{}'],{type:'application/json'}))
     const link=document.createElement('a');link.href=url;link.download='istqb-study-recovery.json';link.click();URL.revokeObjectURL(url)
   }}>下载学习记录备份</button></>}</div>
-  return <Context.Provider value={{bank,state,setState,replaceState,getAttemptBank:attempt=>banks[attemptBankVersion(attempt)],storageError,dismissError:()=>{if(!blocked)setStorageError('')}}}>{children}</Context.Provider>
+  return <Context.Provider value={{bank,state,setState,replaceState,getAttemptBank:attempt=>banks[attemptBankVersion(attempt)],mistakeQuestions,storageError,dismissError:()=>{if(!blocked)setStorageError('')}}}>{children}</Context.Provider>
 }
