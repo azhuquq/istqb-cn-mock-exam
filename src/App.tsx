@@ -84,28 +84,36 @@ function filterName(filter:string) {const [kind,value]=filter.split(':');return 
 function Practice() {
   const {bank,state,setState,mistakeQuestions} = useStudy()
   const [params,setParams] = useSearchParams()
-  const requested=params.get('filter')||state.practice.filter
+  // Navigation belongs to this tab; synchronized answers must not move it.
+  const [position,setPosition] = useState(()=>({filter:state.practice.filter,index:state.practice.index}))
+  const requested=params.get('filter')||position.filter
   const valid=/^(paper:[A-D]|chapter:[1-6]|extra|mistakes)$/.test(requested)?requested:'paper:A'
   const questionPool=valid==='mistakes'?mistakeQuestions:bank.questions
-  useEffect(()=>{if(state.practice.filter!==valid)setState(s=>({...s,practice:{...s.practice,filter:valid,index:0}}))},[valid,state.practice.filter,setState])
+  useEffect(()=>{
+    setPosition(current=>current.filter===valid?current:{filter:valid,index:0})
+    setState(s=>s.practice.filter===valid?s:{...s,practice:{...s.practice,filter:valid,index:0}})
+  },[valid,setState])
   const items=filterQuestions(questionPool,valid,state.mistakes)
   const requestedQuestion=params.get('question')
   useEffect(()=>{
     if(!requestedQuestion)return
     const target=filterQuestions(questionPool,valid,state.mistakes).findIndex(q=>q.id===requestedQuestion)
-    if(target>=0)setState(s=>s.practice.index===target?s:{...s,practice:{...s.practice,index:target}})
+    if(target>=0){
+      setPosition({filter:valid,index:target})
+      setState(s=>({...s,practice:{...s.practice,filter:valid,index:target}}))
+    }
     setParams({filter:valid},{replace:true})
   },[requestedQuestion,valid,questionPool,state.mistakes,setParams,setState])
-  const index=Math.min(state.practice.filter===valid?state.practice.index:0,Math.max(0,items.length-1))
+  const index=Math.min(position.filter===valid?position.index:0,Math.max(0,items.length-1))
   const q=items[index]
   const reviewing=valid==='mistakes'
   const response=reviewing?state.mistakeResponses[q?.id]:undefined
   const submitted=reviewing?!!response?.submitted:!!state.practice.submitted[q?.id]
   const selected=reviewing?response?.answers||[]:state.practice.answers[q?.id]||[]
   const responseBankVersion=response?.bankVersion||bank.bankVersion
-  const go=(i:number)=>{setState(s=>({...s,practice:{...s.practice,index:i}}));window.scrollTo({top:0,behavior:'smooth'})}
+  const go=(i:number)=>{setPosition({filter:valid,index:i});setState(s=>({...s,practice:{...s.practice,filter:valid,index:i}}));window.scrollTo({top:0,behavior:'smooth'})}
   function choose(id:string) {setState(s=>updatePracticeAnswer(s,q.id,toggleOption(reviewing?s.mistakeResponses[q.id]?.answers||[]:s.practice.answers[q.id]||[],id,q.selectionCount),responseBankVersion,reviewing))}
-  function submit() {setState(s=>submitPracticeAnswer(s,q,selected,responseBankVersion))}
+  function submit() {setState(s=>submitPracticeAnswer(s,q,selected,responseBankVersion,reviewing))}
   return <><div className="page-heading"><div><div className="eyebrow">PRACTICE MAKES PROGRESS</div><h1>题库练习<span className="heading-dot">.</span></h1><p>不急着做下一题，先把这一题真正理解。</p></div><FilterSelect value={valid} onChange={filter=>setParams({filter})}/></div>
     {!q?<Empty title="这里暂时没有错题" icon={<CheckCircle2/>}><p>继续练习，答错的题目会自动收集在这里。</p><Link className="button primary" to="/practice?filter=paper:A">开始练习 <ArrowRight size={15}/></Link></Empty>:<div className="question-layout"><div className="question-main"><div className="session-bar"><span>{filterName(valid)}</span><span><strong>{index+1}</strong> / {items.length} 题</span></div><Progress value={(index+1)/items.length*100}/><QuestionCard q={q} selected={selected} onChoose={choose} reveal={submitted}/>
       <div className="question-actions"><button className="button secondary" disabled={index===0} onClick={()=>go(index-1)}><ChevronLeft size={16}/>上一题</button><div>{submitted?<button className="button secondary" onClick={()=>setState(s=>updatePracticeAnswer(s,q.id,[],responseBankVersion,reviewing))}><RotateCcw size={15}/>再做一次</button>:<button className="button primary" data-question-enter disabled={selected.length!==q.selectionCount} onClick={submit}>提交答案 <Check size={16}/></button>}<button className="button primary" disabled={index===items.length-1} onClick={()=>go(index+1)}>下一题 <ChevronRight size={16}/></button></div></div>
@@ -158,6 +166,9 @@ function Exam() {
   const [abandon,setAbandon]=useState(false)
   const [now,setNow]=useState(Date.now())
   const [currentId,setCurrentId]=useState(state.activeExam?.paper===paper?state.activeExam.id:'')
+  useEffect(()=>{
+    if(state.activeExam?.paper===paper)setCurrentId(state.activeExam.id)
+  },[paper,state.activeExam?.id,state.activeExam?.paper])
   useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer)},[])
   useEffect(()=>{if(currentId&&!state.activeExam){const done=state.history.find(a=>a.id===currentId);if(done)navigate(`/results/${done.id}`,{replace:true})}},[currentId,state.activeExam,state.history,navigate])
   if(paper!=='mixed'&&!/^[A-D]$/.test(paper))return <Empty title="没有找到这套试卷"><Link to="/exams" className="button primary">选择试卷</Link></Empty>
@@ -175,7 +186,7 @@ function Exam() {
   function toggleFlag() {setState(s=>{if(!s.activeExam||s.activeExam.id!==attempt.id||Date.now()>=s.activeExam.deadline)return s;return {...s,activeExam:{...s.activeExam,flags:s.activeExam.flags.includes(q.id)?s.activeExam.flags.filter(id=>id!==q.id):[...s.activeExam.flags,q.id]}}})}
   function discard() {setCurrentId('');setState(s=>abandonState(s));navigate(paper==='mixed'?'/mixed':'/exams',{replace:true})}
   function submit() {const id=attempt.id;setState(s=>finishState(s,bank.questions));navigate(`/results/${id}`)}
-  return <><div className="exam-header"><div><Badge tone="green">模拟考试进行中</Badge><h1>{examName(paper)}</h1></div><div className={`exam-timer ${left<5*60*1000?'urgent':''}`}><Clock3 size={20}/><div><small>剩余时间</small><strong>{formatTime(left)}</strong></div></div><div className="exam-header-actions"><button className="button secondary abandon-button" onClick={()=>setAbandon(true)}>放弃考试</button><button className="button primary" data-question-enter onClick={()=>setConfirm(true)}>交卷 <FileCheck2 size={16}/></button></div></div><div className={`question-layout ${attempt.seed?'mixed-exam-layout':''}`}><div className="question-main"><div className="session-bar"><span>已作答 {answered} / 40 题</span><span>当前第 <strong>{index+1}</strong> 题</span></div><Progress value={answered/40*100}/><QuestionCard q={q} selected={attempt.answers[q.id]||[]} onChoose={choose}/><div className="question-actions"><button className="button secondary" disabled={index===0} onClick={()=>go(index-1)}><ChevronLeft size={16}/>上一题</button><button className={`button flag-button ${attempt.flags.includes(q.id)?'flagged':''}`} aria-pressed={attempt.flags.includes(q.id)} aria-keyshortcuts="Enter" data-question-enter onClick={toggleFlag}><Flag size={15}/>{attempt.flags.includes(q.id)?'已标记':'标记待检查'}</button>{index===39?<button className="button primary" data-question-enter onClick={()=>setConfirm(true)}>检查并交卷 <Check size={16}/></button>:<button className="button primary" onClick={()=>go(index+1)}>下一题 <ChevronRight size={16}/></button>}</div><QuestionShortcuts optionIds={q.options.map(o=>o.id)} onChoose={choose} onEnter={toggleFlag} onPrevious={index>0?()=>go(index-1):undefined} onNext={index<attempt.questionIds.length-1?()=>go(index+1):undefined} enterLabel="标记待检查"/></div><aside className="question-aside"><div className="panel navigator"><div className="panel-title">答题卡 <span>{answered} / 40</span></div><div className="number-grid">{attempt.questionIds.map((id,i)=><button key={id} aria-label={`跳转第 ${i+1} 题${attempt.flags.includes(id)?'，已标记':''}`} aria-current={i===index?'step':undefined} className={`${i===index?'current ':''}${attempt.answers[id]?.length?'answered ':''}${attempt.flags.includes(id)?'flagged':''}`} onClick={()=>go(i)}>{i+1}{attempt.flags.includes(id)&&<span className="flag-dot"/>}</button>)}</div><div className="navigator-legend"><span><i className="legend-correct"/>已答</span><span><i className="legend-flag"/>标记</span><span><i/>未答</span></div></div><div className="aside-tip"><Clock3 size={18}/><strong>留一点时间给检查</strong><p>已标记 {attempt.flags.length} 道题。交卷前，别忘了再确认一次。</p></div></aside>{attempt.seed&&<SeedControl seed={attempt.seed}/>}</div>{confirm&&<ConfirmDialog title="准备好提交试卷了吗？" confirmText="确认交卷" onCancel={()=>setConfirm(false)} onConfirm={submit}><p>已作答 {answered} / 40 题{40-answered>0?`，还有 ${40-answered} 道题未作答`:''}。</p>{attempt.flags.length>0&&<p>你标记了 {attempt.flags.length} 道题待检查。</p>}<p>交卷后不能修改答案，可以查看成绩与全部解析。</p></ConfirmDialog>}{abandon&&<ConfirmDialog title="放弃这场考试？" confirmText="放弃并舍弃记录" onCancel={()=>setAbandon(false)} onConfirm={discard}><p>本场考试的作答、标记和进度将被丢弃，不生成成绩，也不加入错题本。</p><p>已有的练习进度、考试记录和错题会保留。放弃后可以重新开始考试。</p></ConfirmDialog>}</>
+  return <><div className="exam-header"><div><Badge tone="green">模拟考试进行中</Badge><h1>{examName(paper)}</h1></div><div className={`exam-timer ${left<5*60*1000?'urgent':''}`}><Clock3 size={20}/><div><small>剩余时间</small><strong>{formatTime(left)}</strong></div></div><div className="exam-header-actions"><button className="button secondary abandon-button" onClick={()=>setAbandon(true)}>放弃考试</button><button className="button primary" onClick={()=>setConfirm(true)}>交卷 <FileCheck2 size={16}/></button></div></div><div className={`question-layout ${attempt.seed?'mixed-exam-layout':''}`}><div className="question-main"><div className="session-bar"><span>已作答 {answered} / 40 题</span><span>当前第 <strong>{index+1}</strong> 题</span></div><Progress value={answered/40*100}/><QuestionCard q={q} selected={attempt.answers[q.id]||[]} onChoose={choose}/><div className="question-actions"><button className="button secondary" disabled={index===0} onClick={()=>go(index-1)}><ChevronLeft size={16}/>上一题</button><button className={`button flag-button ${attempt.flags.includes(q.id)?'flagged':''}`} aria-pressed={attempt.flags.includes(q.id)} aria-keyshortcuts="Enter" data-question-enter onClick={toggleFlag}><Flag size={15}/>{attempt.flags.includes(q.id)?'已标记':'标记待检查'}</button>{index===39?<button className="button primary" onClick={()=>setConfirm(true)}>检查并交卷 <Check size={16}/></button>:<button className="button primary" onClick={()=>go(index+1)}>下一题 <ChevronRight size={16}/></button>}</div><QuestionShortcuts optionIds={q.options.map(o=>o.id)} onChoose={choose} onEnter={toggleFlag} onPrevious={index>0?()=>go(index-1):undefined} onNext={index<attempt.questionIds.length-1?()=>go(index+1):undefined} enterLabel="标记待检查"/></div><aside className="question-aside"><div className="panel navigator"><div className="panel-title">答题卡 <span>{answered} / 40</span></div><div className="number-grid">{attempt.questionIds.map((id,i)=><button key={id} aria-label={`跳转第 ${i+1} 题${attempt.flags.includes(id)?'，已标记':''}`} aria-current={i===index?'step':undefined} className={`${i===index?'current ':''}${attempt.answers[id]?.length?'answered ':''}${attempt.flags.includes(id)?'flagged':''}`} onClick={()=>go(i)}>{i+1}{attempt.flags.includes(id)&&<span className="flag-dot"/>}</button>)}</div><div className="navigator-legend"><span><i className="legend-correct"/>已答</span><span><i className="legend-flag"/>标记</span><span><i/>未答</span></div></div><div className="aside-tip"><Clock3 size={18}/><strong>留一点时间给检查</strong><p>已标记 {attempt.flags.length} 道题。交卷前，别忘了再确认一次。</p></div></aside>{attempt.seed&&<SeedControl seed={attempt.seed}/>}</div>{confirm&&<ConfirmDialog title="准备好提交试卷了吗？" confirmText="确认交卷" onCancel={()=>setConfirm(false)} onConfirm={submit}><p>已作答 {answered} / 40 题{40-answered>0?`，还有 ${40-answered} 道题未作答`:''}。</p>{attempt.flags.length>0&&<p>你标记了 {attempt.flags.length} 道题待检查。</p>}<p>交卷后不能修改答案，可以查看成绩与全部解析。</p></ConfirmDialog>}{abandon&&<ConfirmDialog title="放弃这场考试？" confirmText="放弃并舍弃记录" onCancel={()=>setAbandon(false)} onConfirm={discard}><p>本场考试的作答、标记和进度将被丢弃，不生成成绩，也不加入错题本。</p><p>已有的练习进度、考试记录和错题会保留。放弃后可以重新开始考试。</p></ConfirmDialog>}</>
 }
 
 function Results() {

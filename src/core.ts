@@ -38,12 +38,12 @@ export function finishState(state: StudyState, questions: Question[], now = Date
   return {...state, activeExam: null, history: [completed, ...state.history.filter(a => a.id !== completed.id)], mistakes: [...new Set([...state.mistakes, ...wrong])],mistakeResponses}
 }
 export function updatePracticeAnswer(state: StudyState, id: string, selected: string[], bankVersion: string, reviewing = false): StudyState {
-  return {...state,practice:{...state.practice,answers:{...state.practice.answers,[id]:[...selected]},submitted:{...state.practice.submitted,[id]:false}},
+  return {...state,practice:reviewing?state.practice:{...state.practice,answers:{...state.practice.answers,[id]:[...selected]},submitted:{...state.practice.submitted,[id]:false}},
     mistakeResponses:reviewing?{...state.mistakeResponses,[id]:{answers:[...selected],submitted:false,bankVersion,source:'practice'}}:state.mistakeResponses}
 }
-export function submitPracticeAnswer(state: StudyState, q: Question, selected: string[], bankVersion: string): StudyState {
+export function submitPracticeAnswer(state: StudyState, q: Question, selected: string[], bankVersion: string, reviewing = false): StudyState {
   const mistakes=isCorrect(selected,q.correctAnswers)?state.mistakes:[...new Set([...state.mistakes,q.id])]
-  return {...state,practice:{...state.practice,answers:{...state.practice.answers,[q.id]:[...selected]},submitted:{...state.practice.submitted,[q.id]:true}},mistakes,
+  return {...state,practice:reviewing?state.practice:{...state.practice,answers:{...state.practice.answers,[q.id]:[...selected]},submitted:{...state.practice.submitted,[q.id]:true}},mistakes,
     mistakeResponses:mistakes.includes(q.id)?{...state.mistakeResponses,[q.id]:{answers:[...selected],submitted:true,bankVersion,source:'practice'}}:state.mistakeResponses}
 }
 export function removeMistake(state: StudyState, id: string): StudyState {

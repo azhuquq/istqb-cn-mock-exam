@@ -2,6 +2,7 @@ import {createContext, useContext, useEffect, useMemo, useState, type Dispatch, 
 import {finishState, freshState, parseState, STORAGE_KEY} from './core'
 import {attemptBankVersion, loadBank, restoreStudyState, studyBankVersions} from './banks'
 import type {Attempt, Bank, Question, StudyState} from './types'
+import {StudyPersistence} from './persistence'
 
 interface StudyContext {bank: Bank; state: StudyState; setState: Dispatch<SetStateAction<StudyState>>; replaceState: (next: StudyState) => Promise<void>; getAttemptBank: (attempt: Attempt) => Bank; mistakeQuestions: Question[]; storageError: string; dismissError: () => void}
 const Context = createContext<StudyContext | null>(null)
@@ -10,6 +11,7 @@ export const useStudy = () => {const value = useContext(Context); if (!value) th
 export function StudyProvider({bank, children}: {bank: Bank; children: ReactNode}) {
   const [initial] = useState(() => {try {return {state: parseState(localStorage.getItem(STORAGE_KEY)), error: ''}} catch (e) {return {state: freshState(), error: String(e)}}})
   const [state,setState] = useState(initial.state)
+  const [persistence] = useState(() => new StudyPersistence(serialized => localStorage.setItem(STORAGE_KEY,serialized)))
   const [storageError,setStorageError] = useState(initial.error)
   const [blocked,setBlocked] = useState(!!initial.error)
   const [banks,setBanks] = useState<Record<string,Bank>>({[bank.bankVersion]:bank})
@@ -33,9 +35,9 @@ export function StudyProvider({bank, children}: {bank: Bank; children: ReactNode
   },[versionsKey,retry])
   useEffect(() => {
     if (blocked) return
-    try {localStorage.setItem(STORAGE_KEY, JSON.stringify(state))}
+    try {persistence.save(state)}
     catch {setStorageError('浏览器未能保存学习记录，请检查存储权限或剩余空间。当前页面仍可继续答题。')}
-  }, [state, blocked])
+  }, [state, blocked, persistence])
   useEffect(() => {
     const check = () => setState(s => {
       if(!s.activeExam||Date.now()<s.activeExam.deadline)return s
@@ -52,11 +54,11 @@ export function StudyProvider({bank, children}: {bank: Bank; children: ReactNode
   useEffect(() => {
     const update = (event: StorageEvent) => {
       if (event.key !== STORAGE_KEY) return
-      try {setState(parseState(event.newValue))} catch {setStorageError('另一窗口的学习记录无法读取，请刷新并检查本地记录。');setBlocked(true)}
+      try {setState(persistence.receive(event.newValue))} catch {setStorageError('另一窗口的学习记录无法读取，请刷新并检查本地记录。');setBlocked(true)}
     }
     window.addEventListener('storage',update)
     return () => window.removeEventListener('storage',update)
-  }, [])
+  }, [persistence])
   async function replaceState(next: StudyState) {
     // Load and verify all required snapshots before replacing any local records.
     const {state:restored,banks:restoredBanks}=await restoreStudyState(next)

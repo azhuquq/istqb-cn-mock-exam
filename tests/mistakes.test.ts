@@ -60,7 +60,7 @@ describe('exam answers in the mistake notebook',()=>{
     expect(retry.mistakeResponses[q.id]).toMatchObject({answers:[],submitted:false,source:'practice'})
     expect(importStudy(exportStudy(retry))).toEqual(retry)
     const chosen=updatePracticeAnswer(retry,q.id,q.correctAnswers,bank.bankVersion,true)
-    const corrected=submitPracticeAnswer(chosen,q,q.correctAnswers,bank.bankVersion)
+    const corrected=submitPracticeAnswer(chosen,q,q.correctAnswers,bank.bankVersion,true)
     expect(corrected.mistakes).toContain(q.id)
     expect(corrected.mistakeResponses[q.id]).toMatchObject({answers:q.correctAnswers,submitted:true,source:'practice'})
     expect(isCorrect(corrected.mistakeResponses[q.id].answers,q.correctAnswers)).toBe(true)
@@ -70,6 +70,26 @@ describe('exam answers in the mistake notebook',()=>{
     expect(removed.history).toEqual(corrected.history)
     expect(removed.practice).toEqual(corrected.practice)
     expect(parseState(JSON.stringify(removed)).mistakes).toEqual([])
+  })
+  it.each(['1.0.0','1.0.1'])('keeps mistake retries separate from ordinary practice in bank %s',(practiceVersion)=>{
+    const oldQuestion=bank.questions[0]
+    const currentQuestion={...oldQuestion,correctAnswers:['A']}
+    let state=submitPracticeAnswer(freshState(),currentQuestion,['A'],practiceVersion)
+    const active=newExam('A')
+    active.answers[oldQuestion.id]=['B']
+    state=finishState({...state,activeExam:active},bank.questions,2000)
+    const before=structuredClone(state.practice)
+    const retry=updatePracticeAnswer(state,oldQuestion.id,[],bank.bankVersion,true)
+    expect(retry.practice).toEqual(before)
+    expect(retry.mistakeResponses[oldQuestion.id]).toMatchObject({answers:[],submitted:false,bankVersion:bank.bankVersion})
+    const draft=updatePracticeAnswer(retry,oldQuestion.id,oldQuestion.correctAnswers,bank.bankVersion,true)
+    expect(draft.practice).toEqual(before)
+    const corrected=submitPracticeAnswer(draft,oldQuestion,oldQuestion.correctAnswers,bank.bankVersion,true)
+    expect(corrected.practice).toEqual(before)
+    expect(isCorrect(corrected.practice.answers[oldQuestion.id],currentQuestion.correctAnswers)).toBe(true)
+    expect(corrected.mistakeResponses[oldQuestion.id]).toMatchObject({answers:oldQuestion.correctAnswers,submitted:true,bankVersion:bank.bankVersion})
+    expect(importStudy(exportStudy(corrected))).toEqual(corrected)
+    expect(state.practice).toEqual(before)
   })
 })
 
