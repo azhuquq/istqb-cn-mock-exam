@@ -21,3 +21,6 @@
 @media(max-width:650px){.source-file-list>div{gap:10px}.source-download{padding:11px 10px;gap:7px}.source-download strong{font-size:12px}.source-download small{font-size:10px}}
 
 .practice-navigator .navigator-legend{flex-wrap:wrap;gap:10px 16px}.navigator-legend i.legend-current{background:transparent;border-color:#4c8d6a;box-shadow:0 0 0 1px #e1efe6}
+
+.keyboard-hint{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin:0 0 16px;font-size:11px;line-height:1.8;color:#829387}.keyboard-hint>span{display:inline-flex;align-items:center;gap:4px}.keyboard-hint kbd{display:inline-flex;align-items:center;justify-content:center;min-width:19px;padding:0 4px;border:1px solid #dfe7e2;border-radius:4px;background:#fff;color:#64796a;font:10px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;box-shadow:0 1px 0 #e8eeea}
+@media(max-width:650px){.keyboard-hint{font-size:10px;gap:7px 12px}}
