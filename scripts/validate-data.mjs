@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {createHash} from 'node:crypto'
 import {fileURLToPath} from 'node:url'
 import {validateReleases} from './validate-releases.mjs'
+import {isQuestionId} from '../src/question-ids.mjs'
 export function validateBank(bank) {
 assert.equal(bank.version,1)
 assert.deepEqual(bank.sources.map(source=>source.paper),[...'ABCD'])
@@ -27,8 +28,13 @@ for(const paper of 'ABCD'){
   counts[paper]=bank.questions.filter(q=>q.paper===paper).length
 }
 assert.equal(bank.questions.filter(q=>q.supplementary).length,26)
+assert.deepEqual(bank.questions.filter(q=>q.supplementary).map(q=>q.number),Array.from({length:26},(_,i)=>`A${i+1}`))
 for(const q of bank.questions){
   const fail=(value,message)=>assert.ok(value,`${q.id}: ${message}`)
+  fail(typeof q.supplementary==='boolean','invalid supplementary flag')
+  fail(typeof q.number==='string','invalid question number')
+  fail(!q.supplementary||q.paper==='A','supplementary questions must belong to paper A')
+  fail(isQuestionId(q.id)&&q.id===`${q.paper}-${q.number}`,'question ID must match its paper, number and supplementary flag')
   fail(q.stem?.length>5,'missing question stem')
   fail(q.explanation?.length>15,'missing explanation')
   fail(!/^[b-e][)）]/i.test(q.explanation),'explanation starts after option A')

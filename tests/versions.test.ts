@@ -6,9 +6,9 @@ import {execFileSync} from 'node:child_process'
 import {createHash} from 'node:crypto'
 import releases from '../public/data/releases.json'
 import {ALGORITHMS, getAlgorithm} from '../src/algorithms'
-import {attemptBankVersion, createBankLoader, generateFromSeed, loadStudyBanks, restoreStudyState} from '../src/banks'
+import {attemptBankVersion, createBankLoader, generateFromSeed, getPracticeQuestions, loadStudyBanks, restoreStudyState, studyBankVersions} from '../src/banks'
 import {bankFingerprint, compactMixedSeed, generateMixedPaper, isStoredMixedSeed, parseMixedSeed, randomMixedSeed, seedBankVersion} from '../src/mixed'
-import {finishState, freshState, getResult, parseState, startAttempt, startMixedAttempt} from '../src/core'
+import {finishState, freshState, getResult, isCorrect, parseState, practiceBankVersion, startAttempt, startMixedAttempt, submitPracticeAnswer, updatePracticeAnswer} from '../src/core'
 import {exportStudy, importStudy} from '../src/transfer'
 import type {Bank} from '../src/types'
 
@@ -149,13 +149,24 @@ describe('bank release tooling',()=>{
       mkdirSync(join(root,'public'),{recursive:true})
       cpSync(new URL('../scripts',import.meta.url),join(root,'scripts'),{recursive:true})
       cpSync(new URL('../src/bank-format.mjs',import.meta.url),join(root,'src/bank-format.mjs'))
+      cpSync(new URL('../src/question-ids.mjs',import.meta.url),join(root,'src/question-ids.mjs'))
       cpSync(new URL('../src/algorithms/m1.ts',import.meta.url),join(root,'src/algorithms/m1.ts'))
       cpSync(new URL('../public/data',import.meta.url),join(root,'public/data'),{recursive:true})
       symlinkSync(new URL('../public/questions',import.meta.url).pathname,join(root,'public/questions'))
       symlinkSync(new URL('../public/sources',import.meta.url).pathname,join(root,'public/sources'))
+      const run=(version:string)=>execFileSync(process.execPath,[join(root,'scripts/release-bank.mjs'),version],{cwd:root,stdio:'pipe'})
+      for(const invalid of ['noncanonical','swapped','supplementary']) {
+        const broken=structuredClone(bank)
+        if(invalid==='noncanonical')broken.questions[0].id='A-01'
+        if(invalid==='swapped')[broken.questions[0].id,broken.questions[1].id]=[broken.questions[1].id,broken.questions[0].id]
+        if(invalid==='supplementary')broken.questions.find(q=>q.id==='A-A1')!.id='B-A1'
+        writeFileSync(join(root,'public/data/questions.json'),JSON.stringify(broken,null,2)+'\n')
+        expect(()=>run('1.0.1')).toThrow()
+        expect(JSON.parse(readFileSync(join(root,'public/data/releases.json'),'utf8'))).toEqual(releases)
+        expect(readFileSync(join(root,'public/data/banks/1.0.0.json'))).toEqual(bytes)
+      }
       const working=structuredClone(bank);working.questions[0].explanation+=' 新版解析'
       writeFileSync(join(root,'public/data/questions.json'),JSON.stringify(working,null,2)+'\n')
-      const run=(version:string)=>execFileSync(process.execPath,[join(root,'scripts/release-bank.mjs'),version],{cwd:root,stdio:'pipe'})
       run('1.0.1')
       expect(readFileSync(join(root,'public/data/banks/1.0.0.json'))).toEqual(bytes)
       const manifest=JSON.parse(readFileSync(join(root,'public/data/releases.json'),'utf8'))
@@ -168,5 +179,54 @@ describe('bank release tooling',()=>{
       writeFileSync(join(root,'public/data/banks/1.0.0.json'),Buffer.concat([bytes,Buffer.from(' ')]))
       expect(()=>run('1.0.2')).toThrow() // Frozen snapshot changed.
     } finally {rmSync(root,{recursive:true,force:true})}
+  })
+})
+
+describe('versioned ordinary practice',()=>{
+  const updated=structuredClone(bank)
+  updated.bankVersion='1.0.1'
+  updated.questions[0].correctAnswers=['A']
+  updated.questions[0].explanation='新版题目解析，与旧版的正确答案不同。'
+  const banks={'1.0.0':bank,'1.0.1':updated}
+  it('preserves the original question and grade after a bank upgrade and a backup round trip',async()=>{
+    const original=bank.questions[0]
+    const state=submitPracticeAnswer(freshState(),original,original.correctAnswers,bank.bankVersion)
+    const restored=await restoreStudyState(importStudy(exportStudy(state)),async version=>banks[version as keyof typeof banks])
+    expect(studyBankVersions(restored.state)).toEqual(['1.0.0'])
+    expect(restored.banks['1.0.0']).toBe(bank)
+    const questions=getPracticeQuestions(updated,restored.state,{...restored.banks,'1.0.1':updated})
+    expect(questions[0]).toEqual(original)
+    expect(isCorrect(restored.state.practice.answers[original.id],questions[0].correctAnswers)).toBe(true)
+    expect(isCorrect(restored.state.practice.answers[original.id],updated.questions[0].correctAnswers)).toBe(false)
+    expect(practiceBankVersion(restored.state,original.id,updated.bankVersion)).toBe('1.0.0')
+    expect(practiceBankVersion(restored.state,'A-2',updated.bankVersion)).toBe('1.0.1')
+  })
+  it('treats unversioned legacy answers as bank 1.0.0 without silently regrading them',()=>{
+    const legacy=freshState()
+    legacy.practice.answers={'A-1':['C']};legacy.practice.submitted={'A-1':true}
+    const state=parseState(JSON.stringify(legacy))
+    expect(studyBankVersions(state)).toEqual(['1.0.0'])
+    expect(practiceBankVersion(state,'A-1',updated.bankVersion)).toBe('1.0.0')
+    expect(getPracticeQuestions(updated,state,banks)[0]).toBe(bank.questions[0])
+  })
+  it('switches only the explicitly retried question to the current bank',()=>{
+    let state=submitPracticeAnswer(freshState(),bank.questions[0],['C'],bank.bankVersion)
+    state=submitPracticeAnswer(state,bank.questions[1],bank.questions[1].correctAnswers,bank.bankVersion)
+    state=updatePracticeAnswer(state,'A-1',[],updated.bankVersion)
+    expect(state.practice.submitted['A-1']).toBe(false)
+    expect(state.practice.answers['A-1']).toEqual([])
+    expect(getPracticeQuestions(updated,state,banks)[0]).toBe(updated.questions[0])
+    expect(getPracticeQuestions(updated,state,banks)[1]).toBe(bank.questions[1])
+    state=submitPracticeAnswer(state,updated.questions[0],['A'],updated.bankVersion)
+    expect(state.practice.bankVersions).toEqual({'A-1':'1.0.1','A-2':'1.0.0'})
+    expect(importStudy(exportStudy(state))).toEqual(state)
+  })
+  it('rejects malformed saved practice versions while preserving the original state',()=>{
+    const state=submitPracticeAnswer(freshState(),bank.questions[0],['C'],bank.bankVersion)
+    const original=structuredClone(state)
+    for(const bankVersions of [{'A-1':'broken'},{'A-01':'1.0.0'},{'A-1':2},[]]) {
+      expect(()=>parseState(JSON.stringify({...state,practice:{...state.practice,bankVersions}}))).toThrow()
+    }
+    expect(state).toEqual(original)
   })
 })

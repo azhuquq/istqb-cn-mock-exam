@@ -1,6 +1,7 @@
 import type {Attempt, FormalPaper, MistakeResponse, Question, StudyState} from './types'
 import {isStoredMixedSeed, parseMixedSeed, seedBankVersion, type MixedPaper} from './mixed'
 import {CURRENT_BANK_VERSION, LEGACY_BANK_VERSION, isBankVersion} from './versions'
+import {isQuestionId as questionId} from './question-ids.mjs'
 
 export const STORAGE_KEY = 'istqb-study-v1'
 export const CHAPTERS = ['测试基础', '整个软件开发生命周期中的测试', '静态测试', '测试分析与设计', '管理测试活动', '测试工具']
@@ -8,6 +9,9 @@ export const EXAM_DURATION = 60 * 60 * 1000
 export const freshState = (): StudyState => ({schemaVersion: 1, practice: {filter: 'paper:A', index: 0, answers: {}, submitted: {}}, activeExam: null, history: [], mistakes: [], mistakeResponses: {}})
 export function attemptBankVersion(attempt: Attempt): string {
   return attempt.bankVersion || (attempt.paper === 'mixed' ? seedBankVersion(attempt.seed) : LEGACY_BANK_VERSION)
+}
+export function practiceBankVersion(state: StudyState, id: string, currentVersion = CURRENT_BANK_VERSION): string {
+  return state.practice.bankVersions?.[id] || (Object.hasOwn(state.practice.answers,id) || Object.hasOwn(state.practice.submitted,id) ? LEGACY_BANK_VERSION : currentVersion)
 }
 export function isCorrect(selected: string[] = [], expected: string[]) {
   return selected.length === expected.length && new Set(selected).size === selected.length && expected.every(id => selected.includes(id))
@@ -38,12 +42,14 @@ export function finishState(state: StudyState, questions: Question[], now = Date
   return {...state, activeExam: null, history: [completed, ...state.history.filter(a => a.id !== completed.id)], mistakes: [...new Set([...state.mistakes, ...wrong])],mistakeResponses}
 }
 export function updatePracticeAnswer(state: StudyState, id: string, selected: string[], bankVersion: string, reviewing = false): StudyState {
-  return {...state,practice:reviewing?state.practice:{...state.practice,answers:{...state.practice.answers,[id]:[...selected]},submitted:{...state.practice.submitted,[id]:false}},
+  if(reviewing&&!state.mistakes.includes(id))return state
+  return {...state,practice:reviewing?state.practice:{...state.practice,answers:{...state.practice.answers,[id]:[...selected]},submitted:{...state.practice.submitted,[id]:false},bankVersions:{...state.practice.bankVersions,[id]:bankVersion}},
     mistakeResponses:reviewing?{...state.mistakeResponses,[id]:{answers:[...selected],submitted:false,bankVersion,source:'practice'}}:state.mistakeResponses}
 }
 export function submitPracticeAnswer(state: StudyState, q: Question, selected: string[], bankVersion: string, reviewing = false): StudyState {
+  if(reviewing&&!state.mistakes.includes(q.id))return state
   const mistakes=isCorrect(selected,q.correctAnswers)?state.mistakes:[...new Set([...state.mistakes,q.id])]
-  return {...state,practice:reviewing?state.practice:{...state.practice,answers:{...state.practice.answers,[q.id]:[...selected]},submitted:{...state.practice.submitted,[q.id]:true}},mistakes,
+  return {...state,practice:reviewing?state.practice:{...state.practice,answers:{...state.practice.answers,[q.id]:[...selected]},submitted:{...state.practice.submitted,[q.id]:true},bankVersions:{...state.practice.bankVersions,[q.id]:bankVersion}},mistakes,
     mistakeResponses:mistakes.includes(q.id)?{...state.mistakeResponses,[q.id]:{answers:[...selected],submitted:true,bankVersion,source:'practice'}}:state.mistakeResponses}
 }
 export function removeMistake(state: StudyState, id: string): StudyState {
@@ -61,7 +67,7 @@ function recoverMistakeResponses(state: StudyState): Record<string,MistakeRespon
     if(attempt&&state.practice.submitted[id]!==false) {
       responses[id]={answers:[...attempt.answers[id]],submitted:true,bankVersion:attemptBankVersion(attempt),source:'exam',attemptId:attempt.id}
     } else if(Object.hasOwn(state.practice.answers,id)||Object.hasOwn(state.practice.submitted,id)) {
-      responses[id]={answers:[...(state.practice.answers[id]||[])],submitted:!!state.practice.submitted[id],bankVersion:LEGACY_BANK_VERSION,source:'practice'}
+      responses[id]={answers:[...(state.practice.answers[id]||[])],submitted:!!state.practice.submitted[id],bankVersion:practiceBankVersion(state,id),source:'practice'}
     }
   }
   return responses
@@ -87,7 +93,6 @@ export function filterQuestions(questions: Question[], filter: string, mistakes:
 }
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value)
 const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every(x => typeof x === 'string')
-const questionId = (value: string) => /^(?:[A-D]-(?:[1-9]|[1-3]\d|40)|A-A(?:[1-9]|1\d|2[0-6]))$/.test(value)
 const answers = (value: unknown): value is Record<string,string[]> => record(value) && Object.entries(value).every(([id,v]) => questionId(id) && strings(v) && v.every(x => /^[A-E]$/.test(x)))
 function validAttempt(value: unknown): value is Attempt {
   if (record(value) && value.bankVersion !== undefined && !isBankVersion(value.bankVersion)) return false
@@ -110,6 +115,7 @@ export function parseState(raw: string | null): StudyState {
   const value: unknown = JSON.parse(raw)
   if (!record(value) || value.schemaVersion !== 1 || !record(value.practice) || typeof value.practice.filter !== 'string' || !Number.isInteger(value.practice.index) || Number(value.practice.index) < 0
       || !answers(value.practice.answers) || !record(value.practice.submitted) || !Object.entries(value.practice.submitted).every(([id,v]) => questionId(id) && typeof v === 'boolean')
+      || (value.practice.bankVersions !== undefined && (!record(value.practice.bankVersions) || !Object.entries(value.practice.bankVersions).every(([id,v])=>questionId(id)&&isBankVersion(v))))
       || !strings(value.mistakes) || !value.mistakes.every(questionId) || !Array.isArray(value.history) || !value.history.every(v => validAttempt(v) && v.status === 'completed')
       || (value.activeExam !== null && (!validAttempt(value.activeExam) || value.activeExam.status !== 'active'))
       || (value.mistakeResponses !== undefined && (!record(value.mistakeResponses) || !Object.entries(value.mistakeResponses).every(([id,response])=>

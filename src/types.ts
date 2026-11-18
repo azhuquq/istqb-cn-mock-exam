@@ -22,7 +22,7 @@ export interface MistakeResponse {
 }
 export interface StudyState {
   schemaVersion: 1;
-  practice: {filter: string; index: number; answers: Record<string, string[]>; submitted: Record<string, boolean>};
+  practice: {filter: string; index: number; answers: Record<string, string[]>; submitted: Record<string, boolean>; bankVersions?: Record<string,string>};
   activeExam: Attempt | null; history: Attempt[]; mistakes: string[];
   mistakeResponses: Record<string,MistakeResponse>;
 }

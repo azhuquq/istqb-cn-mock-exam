@@ -91,6 +91,14 @@ describe('exam answers in the mistake notebook',()=>{
     expect(importStudy(exportStudy(corrected))).toEqual(corrected)
     expect(state.practice).toEqual(before)
   })
+  it('ignores stale review actions after another window removes the mistake',()=>{
+    const q=bank.questions[0]
+    const state=submitPracticeAnswer(freshState(),q,['A'],bank.bankVersion)
+    const removed=removeMistake(state,q.id)
+    expect(updatePracticeAnswer(removed,q.id,['B'],bank.bankVersion,true)).toBe(removed)
+    expect(submitPracticeAnswer(removed,q,['B'],bank.bankVersion,true)).toBe(removed)
+    expect(importStudy(exportStudy(removed))).toEqual(removed)
+  })
 })
 
 describe('legacy mistake-answer recovery and validation',()=>{

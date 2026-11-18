@@ -65,11 +65,11 @@ export function MixedPage() {
     } catch(e) {if(request===generation.current)setError(e instanceof Error ? e.message : '无法生成试卷，请重试。')}
     finally {if(request===generation.current)setGenerating(false)}
   }
-  function start() {
+  async function start() {
     if (!paper || generating || state.activeExam) return
     const attempt = startMixedAttempt(paper)
-    setState(s=>s.activeExam?s:{...s,activeExam:attempt})
-    navigate('/exam/mixed')
+    const next=await setState(s=>s.activeExam?s:{...s,activeExam:attempt})
+    if(next?.activeExam)navigate(`/exam/${next.activeExam.paper}`)
   }
   return <>
     <div className="page-heading"><div><div className="eyebrow">A FRESH MIX, THE SAME STANDARD</div><h1>混合模拟<span className="heading-dot">.</span></h1><p>从全部 186 道题中随机组卷，包含 A 卷 26 道附加题。</p></div></div>

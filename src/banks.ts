@@ -1,7 +1,7 @@
 import type {Bank, StudyState} from './types'
 import {bankFingerprint, generateMixedPaper, parseMixedSeed, seedBankVersion} from './mixed'
 import {getAlgorithm} from './algorithms'
-import {attemptBankVersion, finishState, parseState} from './core'
+import {attemptBankVersion, finishState, parseState, practiceBankVersion} from './core'
 import {BANK_RELEASES, CURRENT_BANK_VERSION} from './versions'
 export {attemptBankVersion} from './core'
 
@@ -33,7 +33,11 @@ export const loadBank = createBankLoader()
 export const loadCurrentBank = () => loadBank(CURRENT_BANK_VERSION)
 export function studyBankVersions(state: StudyState): string[] {
   const attempts = state.activeExam ? [state.activeExam,...state.history] : state.history
-  return [...new Set([...attempts.map(attemptBankVersion),...Object.values(state.mistakeResponses).map(response=>response.bankVersion)])].sort()
+  const practiceIds=new Set([...Object.keys(state.practice.answers),...Object.keys(state.practice.submitted)])
+  return [...new Set([...attempts.map(attemptBankVersion),...Object.values(state.mistakeResponses).map(response=>response.bankVersion),...[...practiceIds].map(id=>practiceBankVersion(state,id))])].sort()
+}
+export function getPracticeQuestions(bank: Bank, state: StudyState, banks: Record<string,Bank>) {
+  return bank.questions.map(q=>(banks[practiceBankVersion(state,q.id,bank.bankVersion)]||bank).questions.find(item=>item.id===q.id)!)
 }
 export async function loadStudyBanks(state: StudyState, loader: BankLoader = loadBank): Promise<Record<string,Bank>> {
   const versions=studyBankVersions(state)
