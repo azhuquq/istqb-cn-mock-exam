@@ -1,14 +1,14 @@
-# ISTQB 练习室
+# istqb-cn-mock-exam
 
 基于 React、TypeScript、Vite 的 CTFL 4.0.1 中文模拟考试网站。四套正式试卷共 160 题，A 卷附加练习 26 题。题库包含原文解析、学习目标、知识级别以及可放大的原题和解析截图。
 
-网站：https://istqb-mock-exam.azhuquq.com
+网站：https://istqb.azhuquq.com
 
-公开仓库：https://github.com/azhuquq/istqb-mock-exam
+公开仓库：https://github.com/azhuquq/istqb-cn-mock-exam
 
 ## 本地运行
 
-要求 Node.js 22.12+。
+要求 Node.js 22.12+。本地工作目录暂保留 `istqb-mock-exam`，项目与远程仓库名称为 `istqb-cn-mock-exam`。
 
 ```sh
 npm ci
@@ -56,12 +56,12 @@ GitHub 仓库已连接 Vercel 项目。推送 `main` 自动部署生产站，其
 `vercel.json` 已配置 Vite 构建与 SPA 路由。构建先校验题库再执行 TypeScript 检查及生产打包；输出目录为 `dist`。
 
 ```sh
-vercel link --project istqb-mock-exam --scope azhuquqs-projects
+vercel link --project istqb-cn-mock-exam --scope azhuquqs-projects
 vercel deploy --scope azhuquqs-projects
 vercel deploy --prod --scope azhuquqs-projects
 ```
 
-生产域名：`istqb-mock-exam.azhuquq.com`。按 Vercel 返回的要求配置域名 DNS。`.vercel/`、凭证、原始 PDF、构建缓存不进入源代码。
+生产域名：`istqb.azhuquq.com`。按 Vercel 返回的要求配置域名 DNS。`.vercel/`、凭证、原始 PDF、构建缓存不进入源代码。
 
 ## 来源
 

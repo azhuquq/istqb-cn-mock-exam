@@ -36,22 +36,17 @@
 
 截图保存在本地 `artifacts/qa/`，不随网站上传。
 
-## 部署
+## 部署与更名（2026-11-18）
 
-Vercel 团队：`azhuquqs-projects`；项目：`istqb-mock-exam`。
+- 项目、npm 包、GitHub 仓库和 Vercel 项目统一更名为 `istqb-cn-mock-exam`。
+- 本地工作目录保留 `/home/azhu/Develop/istqb-mock-exam`，Vercel 项目 ID 保留 `prj_IfuJMm4ccV2RYzB3ldeXUkowvT3Q`。
+- 公开仓库：https://github.com/azhuquq/istqb-cn-mock-exam
+- 生产域名：https://istqb.azhuquq.com
+- Vercel 团队为 `azhuquqs-projects`，GitHub 自动部署连接已更新，生产分支为 `main`。
+- Vercel DNS 检查返回 `ok: true`、`misconfigured: false`、项目域名 `verified: true`；保留用户选择的 `cname-china.vercel-dns.com`。
+- 新域名 HTTPS 证书为 `cert_H33abHJXUWb6ExAStCQQASTt`，启用自动续期。
+- 旧域名 `istqb-mock-exam.azhuquq.com` 及中间域名 `istqb-cn-mock-exam.azhuquq.com` 已从 Vercel 项目域名列表与别名中移除，Cloudflare 中对应的 CNAME 记录也已删除。DNS 筛选 `istqb` 后仅保留最终域名记录。
+- `package.json`、锁文件、README 和本地 Vercel 项目名称已同步，生产构建通过。
+- 当前 Chrome 中旧域名的练习、错题、历史和进行中的考试均为空，无需迁移。其他浏览器的学习记录仍按各自域名隔离。
 
-初版部署 ID：`dpl_2Mde8D5htg72TAkBvja7q1FdJyWo`，Vercel Inspect 返回 `Ready`。
-
-自定义域名：https://istqb-mock-exam.azhuquq.com
-
-自定义域名已关联项目。Vercel 域名验证返回 `ok: true`、`misconfigured: false`、项目域名 `verified: true`。用户选择的 CNAME 为 `cname-china.vercel-dns.com`，平台接受该配置。
-
-Vercel 已签发覆盖此域名的自动续期证书，证书 ID 为 `cert_8kzcgjsWMAAX28i9QKIHT33T`，到期时间为 2027-02-16T11:14:54+00:00。线上发布状态、DNS 与证书通过 Vercel 平台检查确认；应用交互在本地生产构建中验证。
-
-## GitHub 发布与自动部署
-
-公开仓库：https://github.com/azhuquq/istqb-mock-exam
-
-功能提交：`d445154b5ae56010dca5aa485a7436a40d5b1a5d`。已用 GitHub CLI 确认仓库为 `PUBLIC`，远程 `main` 与本地提交一致。
-
-Vercel 已连接该 GitHub 仓库，生产分支为 `main`；本次推送触发生产构建。功能实现的部署 ID 为 `dpl_H7Ak2zEw5FagEhvwispFEvR1WUcM`，Vercel Inspect 确认 `Ready`，正式域名已指向本次部署且 `verified: true`。
+部署状态、DNS 与证书通过 Vercel 平台检查；应用交互已在本地生产构建中验收。
