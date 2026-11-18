@@ -1,7 +1,18 @@
 import fs from 'node:fs'
 import assert from 'node:assert/strict'
+import {createHash} from 'node:crypto'
 const bank=JSON.parse(fs.readFileSync(new URL('../public/data/questions.json',import.meta.url),'utf8'))
 assert.equal(bank.version,1)
+assert.deepEqual(bank.sources.map(source=>source.paper),[...'ABCD'])
+for(const source of bank.sources){
+  for(const kind of ['question','answer']){
+    const filename=source[`${kind}File`]
+    assert.ok(filename.endsWith('.pdf')&&!/[\\/]/.test(filename),'invalid source filename')
+    const pdf=fs.readFileSync(new URL('../public/sources/'+encodeURIComponent(filename),import.meta.url))
+    assert.equal(pdf.subarray(0,5).toString(),'%PDF-','source is not a PDF: '+filename)
+    assert.equal(createHash('sha256').update(pdf).digest('hex'),source[`${kind}Sha256`],'original PDF changed: '+filename)
+  }
+}
 assert.equal(bank.questions.length,186)
 assert.equal(new Set(bank.questions.map(q=>q.id)).size,186)
 const chapterDistribution=[8,6,4,11,9,2]
@@ -35,4 +46,4 @@ for(const q of bank.questions){
 }
 for(const id of ['A-14','A-33','A-A6','C-31'])assert.ok(bank.questions.find(q=>q.id===id).stemImages.length,`${id}: required table/chart missing`)
 assert.ok(bank.questions.find(q=>q.id==='B-13').explanation.includes('系统规格说明'),'B-13: first explanation paragraph missing')
-console.log(`Validated ${bank.questions.length} questions (${JSON.stringify(counts)}), answers, chapters, explanations and source images.`)
+console.log(`Validated ${bank.questions.length} questions (${JSON.stringify(counts)}), answers, chapters, explanations, source images and 8 original PDFs (SHA-256).`)

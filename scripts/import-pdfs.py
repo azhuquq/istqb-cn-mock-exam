@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
@@ -238,6 +239,14 @@ def main():
             sources.append(source)
             print(f'{paper}: {len(q)} questions imported', flush=True)
     payload = {'version': 1, 'syllabus': 'CTFL 4.0.1', 'sources': sources, 'questions': questions}
+    pdf_out = ROOT / 'public/sources'
+    pdf_out.mkdir(parents=True, exist_ok=True)
+    for source in sources:
+        for key in ['questionFile', 'answerFile']:
+            original = args.source_dir / source[key]
+            destination = pdf_out / source[key]
+            if original.resolve() != destination.resolve():
+                shutil.copyfile(original, destination)
     (ROOT / 'public/data/questions.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2)+'\n')
     print(f'Imported {len(questions)} questions')
 

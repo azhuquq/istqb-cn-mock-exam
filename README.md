@@ -29,6 +29,7 @@ npm run preview
 - 答题卡、标记待检查、自动保存、固定截止时间、超时结算。考试途中可确认放弃，舍弃本场作答与标记，不生成成绩或错题。
 - 考试报告、章节表现、逐题回顾、考试历史与错题本。
 - 手机及桌面布局；题图支持放大、横向滚动查看。
+- “题库来源”提供 A–D 卷试题与答案解析共 8 份原始 PDF 下载。
 - 无账号及后端。学习记录使用当前域名下的 localStorage（`istqb-study-v1`），不会跨设备同步。不同预览域名和正式域名的记录相互独立。
 
 错题答对后仍保留，由用户手动移除。“题库说明与数据备份”页提供 LZ4 备份码的生成、复制、粘贴导入及记录清空功能。导入前显示备份摘要并确认替换；无效备份或保存失败时保留当前记录。
@@ -37,7 +38,7 @@ npm run preview
 
 ## 题库维护
 
-已生成的 `public/data/questions.json` 和 `public/questions/` 是网站运行所需内容，部署无需原 PDF 或 Python。来源文件名与 SHA-256 保存在 JSON 的 `sources` 中。
+题库文字与裁图位于 `public/data/questions.json`、`public/questions/`。8 份原始 PDF 位于 [`public/sources/`](public/sources/)，保留原始中文文件名，页面通过同域名链接下载。部署无需 Python 或本机课程目录。来源文件名与 SHA-256 保存在 JSON 的 `sources` 中，构建前校验每份 PDF 的完整性。
 
 重新导入需要 Python 3、Poppler（`pdftotext`、`pdftoppm`）与 ImageMagick（`magick`）：
 
@@ -47,7 +48,7 @@ npm run data:validate
 npm test
 ```
 
-导入依据 PDF 的文字坐标识别题目与选项，使用参考答案表匹配答案、章节和知识级别，并对 D 卷重复部分去重。复杂题干保留原图。修改导入逻辑后必须核对跨页题、多选题、图表和解析，不能仅凭题量校验认定内容正确。
+导入脚本会把试题及答案解析的原始 PDF 同步到 `public/sources/`。导入依据 PDF 的文字坐标识别题目与选项，使用参考答案表匹配答案、章节和知识级别，并对 D 卷重复部分去重。复杂题干保留原图。修改导入逻辑后必须核对跨页题、多选题、图表和解析，不能仅凭题量校验认定内容正确。
 
 ## Vercel
 
@@ -61,7 +62,7 @@ vercel deploy --scope azhuquqs-projects
 vercel deploy --prod --scope azhuquqs-projects
 ```
 
-生产域名：`istqb.azhuquq.com`。按 Vercel 返回的要求配置域名 DNS。`.vercel/`、凭证、原始 PDF、构建缓存不进入源代码。
+生产域名：`istqb.azhuquq.com`。按 Vercel 返回的要求配置域名 DNS。`.vercel/`、凭证和构建缓存不进入源代码；8 份公开下载 PDF 随仓库和网站发布。
 
 ## 来源
 
