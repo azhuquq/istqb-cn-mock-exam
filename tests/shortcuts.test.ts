@@ -5,14 +5,14 @@ function key(key:string, overrides:Partial<Parameters<typeof handleQuestionKey>[
   return {key,repeat:false,isComposing:false,keyCode:0,defaultPrevented:false,ctrlKey:false,altKey:false,metaKey:false,shiftKey:false,preventDefault:vi.fn(),...overrides}
 }
 function bindings(optionIds=[...'ABCDE']):QuestionBindings {
-  return {optionIds,onChoose:vi.fn(),onSubmit:vi.fn(),onPrevious:vi.fn(),onNext:vi.fn()}
+  return {optionIds,onChoose:vi.fn(),onEnter:vi.fn(),onPrevious:vi.fn(),onNext:vi.fn()}
 }
 describe('question keyboard controls',()=>{
   it('maps the five number keys to their actual options without also submitting',()=>{
     const actions=bindings()
     for(const number of ['1','2','3','4','5'])expect(handleQuestionKey(key(number),actions)).toBe(true)
     expect(vi.mocked(actions.onChoose!).mock.calls.map(call=>call[0])).toEqual([...'ABCDE'])
-    expect(actions.onSubmit).not.toHaveBeenCalled()
+    expect(actions.onEnter).not.toHaveBeenCalled()
   })
   it('ignores absent fifth options and unrelated keys',()=>{
     const actions=bindings([...'ABCD'])
@@ -23,14 +23,14 @@ describe('question keyboard controls',()=>{
     }
     expect(actions.onChoose).not.toHaveBeenCalled()
   })
-  it('submits only on Enter and navigates in the correct direction',()=>{
+  it('runs the configured Enter action and navigates in the correct direction',()=>{
     const actions=bindings()
     for(const name of ['Enter','ArrowLeft','ArrowRight']){
       const event=key(name)
       expect(handleQuestionKey(event,actions)).toBe(true)
       expect(event.preventDefault).toHaveBeenCalledOnce()
     }
-    expect(actions.onSubmit).toHaveBeenCalledOnce()
+    expect(actions.onEnter).toHaveBeenCalledOnce()
     expect(actions.onPrevious).toHaveBeenCalledOnce()
     expect(actions.onNext).toHaveBeenCalledOnce()
     expect(actions.onChoose).not.toHaveBeenCalled()
@@ -42,7 +42,7 @@ describe('question keyboard controls',()=>{
       expect(handleQuestionKey(event,actions)).toBe(true)
       expect(event.preventDefault).toHaveBeenCalledOnce()
     }
-    for(const action of [actions.onChoose,actions.onSubmit,actions.onPrevious,actions.onNext])expect(action).not.toHaveBeenCalled()
+    for(const action of [actions.onChoose,actions.onEnter,actions.onPrevious,actions.onNext])expect(action).not.toHaveBeenCalled()
   })
   it('leaves modifier shortcuts, IME composition and previously handled keys alone',()=>{
     const actions=bindings()

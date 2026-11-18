@@ -1,7 +1,7 @@
 export interface QuestionBindings {
   optionIds: readonly string[]
   onChoose?: (option: string) => void
-  onSubmit?: () => void
+  onEnter?: () => void
   onPrevious?: () => void
   onNext?: () => void
 }
@@ -17,7 +17,7 @@ export function handleQuestionKey(event: QuestionKeyEvent, bindings: QuestionBin
   event.preventDefault()
   if (event.repeat) return true
   if (option) bindings.onChoose?.(option)
-  else if (event.key === 'Enter') bindings.onSubmit?.()
+  else if (event.key === 'Enter') bindings.onEnter?.()
   else if (event.key === 'ArrowLeft') bindings.onPrevious?.()
   else bindings.onNext?.()
   return true
