@@ -80,7 +80,7 @@ export function MixedPage() {
         <button className="button primary" disabled={!fingerprint||generating} onClick={()=>generate(randomMixedSeed(fingerprint,bank.bankVersion))}><Shuffle size={16}/>{generating?'正在准备试卷…':paper?'重新随机生成':'随机生成试卷'}</button>
         <form onSubmit={e=>{e.preventDefault();generate(input)}}>
           <label htmlFor="mixed-seed">使用生成种子复用试卷</label>
-          <input id="mixed-seed" value={input} onChange={e=>setInput(e.target.value)} maxLength={100} placeholder="M1-1-…（也支持旧格式）" autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false}/>
+          <input id="mixed-seed" value={input} onChange={e=>setInput(e.target.value)} maxLength={100} placeholder="M1-1-XXXXXXX" autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false}/>
           <button className="button secondary" disabled={generating||!input.trim()}>复用这套试卷 <ArrowRight size={15}/></button>
         </form>
         <p>相同种子复现相同题目和顺序，每次开考单独计时。复用时会自动加载种子对应的已发布题库和算法版本。</p>
